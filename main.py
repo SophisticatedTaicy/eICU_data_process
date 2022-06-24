@@ -74,12 +74,9 @@ if __name__ == '__main__':
     df_list = []
     # 数据分割
     for i in range(10):
-        df_list.append(df[i:i + 1]['id'])
-    print(df_list)
-    df_list.append(df[1000: -1])
+        df_list.append(df[i:i + 1])
+    print(df_list.__sizeof__())
     for data in df_list:
         for unitid in data['id']:
             # 分线程运行
-            find_all_features.combine_feature(cursor, unitid)
-            print(unitid)
-            # MyThread(str(unitid), unitid, cursor=cursor).start()
+            MyThread(name=str(unitid), unitid=unitid, cursor=cursor).start()
