@@ -1,0 +1,819 @@
+-- 40397 有呼吸衰竭的住院记录
+select distinct diag.patientunitstayid
+from eicu_crd.diagnosis as diag
+where diag.diagnosisstring like '%respiratory failure%'
+union all
+select dx.patientunitstayid
+from eicu_crd.admissiondx as dx
+where dx.admitdxpath like '%respiratory failure%';
+
+select distinct diag.patientunitstayid
+from eicu_crd.diagnosis as diag
+where diag.diagnosisstring like '%congestive heart failure%'
+union all
+select dx.patientunitstayid
+from eicu_crd.admissiondx as dx
+where dx.admitdxpath like '%congestive heart failure%';
+
+-- 33282
+select patient.patientunitstayid
+from eicu_crd.patient as patient
+where patient.patientunitstayid in (select distinct diag.patientunitstayid
+                                    from eicu_crd.diagnosis as diag
+                                    where diag.diagnosisstring like '%respiratory failure%'
+                                    union all
+                                    select dx.patientunitstayid
+                                    from eicu_crd.admissiondx as dx
+                                    where dx.admitdxpath like '%respiratory failure%')
+  and patient.patientunitstayid not in (select distinct diag.patientunitstayid
+                                        from eicu_crd.diagnosis as diag
+                                        where diag.diagnosisstring like '%congestive heart failure%'
+                                        union all
+                                        select dx.patientunitstayid
+                                        from eicu_crd.admissiondx as dx
+                                        where dx.admitdxpath like '%congestive heart failure%');
+
+
+-- 85769
+select l1.patientunitstayid, l1.labname, count(l1.labresult)
+from eicu_crd.lab as l1
+group by l1.labname, l1.patientunitstayid
+having position('pao2' in lower(l1.labname)) > 0;
+
+-- 94982
+select rc.patientunitstayid, count(rc.patientunitstayid)
+from eicu_crd.respiratorycharting as rc
+where rc.patientunitstayid in (
+-- 164040
+    select distinct l1.patientunitstayid
+    from eicu_crd.lab as l1
+    where position('fio2' in lower(l1.labname)) > 0
+    union all
+    select distinct rc.patientunitstayid
+    from eicu_crd.respiratorycharting as rc
+    where position('fio2' in lower(rc.respchartvaluelabel)) > 0)
+group by rc.patientunitstayid;
+
+-- 50319
+select rc.patientunitstayid, count(rc.patientunitstayid)
+from eicu_crd.respiratorycharting as rc
+where rc.patientunitstayid in (
+-- 72529
+    select distinct l1.patientunitstayid
+    from eicu_crd.lab as l1
+    where position('peep' in lower(l1.labname)) > 0
+    union all
+    select distinct rc.patientunitstayid
+    from eicu_crd.respiratorycharting as rc
+    where position('peep' in lower(rc.respchartvaluelabel)) > 0)
+group by rc.patientunitstayid;
+
+
+select *
+from pg_tables
+where schemaname = 'eicu_crd';
+
+select *
+from information_schema.columns
+where table_schema = 'eicu_crd'
+  and table_name = 'lab';
+
+select labname, patientunitstayid
+from eicu.eicu_crd.lab;
+
+select *
+from eicu.eicu_crd.lab;
+
+-- 设置视图
+select *
+from information_schema.tables;
+set search_path to eicu_crd;
+
+select labresult, labresultoffset
+from lab
+where position('pao2' in lower(labname)) > 0
+  and patientunitstayid = '1566687';
+
+select lab.patientunitstayid, labresult, labresultoffset
+from lab
+where position('pao2' in lower(lab.labname)) > 0
+  and lab.patientunitstayid in (select distinct lab.patientunitstayid
+                                from lab
+                                where position('peep' in lower(lab.labname)) > 0
+                                union all
+                                select distinct rc.patientunitstayid
+                                from respiratorycharting as rc
+                                where position('peep' in lower(rc.respchartvaluelabel)) > 0)
+;
+
+select labresult, labresultoffset
+from lab
+where position('pao2' in lower(lab.labname)) > 0
+  and lab.patientunitstayid = 3181349
+order by labresultoffset;
+
+(select labresult, labresultoffset as offset
+ from lab
+ having position('fio2' in lower(lab.labname)) > 0
+    and lab.patientunitstayid = 3181349
+ order by labresultoffset)
+union all
+(select cast(rc.respchartvalue as numeric) as labresult, rc.respchartentryoffset as offset
+ from respiratorycharting as rc
+ having position('fio2' in lower(rc.respchartvaluelabel)) > 0
+    and rc.patientunitstayid = 3181349
+ order by rc.respchartentryoffset);
+
+select distinct rc.patientunitstayid as unitid
+from respiratorycharting as rc
+union all
+select lab.patientunitstayid as unitid
+from lab;
+
+select count(rc.respchartid)
+from respiratorycharting as rc;
+
+select distinct rc.patientunitstayid
+from respiratorycharting as rc,
+     lab as lb,
+     diagnosis as dg,
+     admissiondx as dx,
+     patient as pa
+where (dg.diagnosisstring like '%respiratory failure%' or dx.admitdxpath like '%respiratory failure%')
+    and (dg.diagnosisstring not like '%congestive heart failure%' and
+         dx.admitdxpath not like '%congestive heart failure%')
+    and (position('peep' in lower(lb.labname)) > 0 and lb.labresult >= 5)
+   or (position('peep' in lower(rc.respchartvaluelabel)) > 0 and rc.respchartvalue >= '5')
+    and pa.age >= '18'
+    and rc.patientunitstayid = pa.patientunitstayid
+    and rc.patientunitstayid = lb.patientunitstayid
+    and rc.patientunitstayid = dg.patientunitstayid
+    and rc.patientunitstayid = dx.patientunitstayid;
+
+select patientunitstayid
+from patient as pa
+where pa.age >= '18';
+
+-- 在lab和apacheapsvar中取到每次住院记录下患者的pao2值按照患者和时间分组
+select lb.labresultoffset as offset, lab.labname, lab.labresult as result
+from (select labresultoffset
+      from lab as lb
+      where labresultoffset > 0
+      group by labresultoffset) lb
+         left join lab on lab.patientunitstayid = 141168
+where (position('pao2' in lower(lab.labname)) > 0
+    or position('fio2' in lower(lab.labname)) > 0)
+  and lb.labresultoffset = lb.labresultoffset
+  and lab.labresult notnull;
+
+select labresultoffset, labname, labresult
+from lab
+where (position('pao2' in lower(lab.labname)) > 0
+    or position('fio2' in lower(lab.labname)) > 0)
+  and lab.labresultoffset > 0
+  and patientunitstayid = 141168
+order by labresultoffset;
+
+select patientunitstayid, labresultoffset, lower(labname), labresult
+from lab
+where (position('pao2' in lower(lab.labname)) > 0
+    or position('fio2' in lower(lab.labname)) > 0)
+  and lab.labresultoffset > 0
+order by patientunitstayid asc, labresultoffset asc;
+
+select
+--     药物使用
+case when position('warfarin' in lower(me.drugname)) > 0 then 1 else 0 end                  as warfarin,
+case
+    when position('dobutamine' in lower(infu.drugname)) > 0 then 1
+    else 0 end                                                                              as dobutamine,
+case when position('dopamine' in lower(infu.drugname)) > 0 then 1 else 0 end                as Dopamine,
+case
+    when position('epinephrine ' in lower(infu.drugname)) > 0 then 1
+    else 0 end                                                                              as epinephrine,
+case when position('heparin' in lower(infu.drugname)) > 0 then 1 else 0 end                 as Heparin,
+case
+    when position('milrinone' in lower(infu.drugname)) > 0 then 1
+    else 0 end                                                                              as Milrinone,
+case
+    when position('norepinephrine' in lower(infu.drugname)) > 0 then 1
+    else 0 end                                                                              as Norepinephrine,
+case
+    when position('phenylephrine' in lower(infu.drugname)) > 0 then 1
+    else 0 end                                                                              as phenylephrine,
+case
+    when position('vasopressin' in lower(infu.drugname)) > 0 then 1
+    else 0 end                                                                              as vasopressin,
+case
+    when position('vasopressor' in lower(tr.treatmentstring)) > 0 then 1
+    else 0 end                                                                              as Vasopressor,
+--       入院疾病诊断
+case
+    when position('acute coronary Syndrome(diagnosis)' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Acute_Coronary_Syndrome_diagnosis,
+case
+    when position('acute myocardial infarction' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Acute_Myocardial_Infarction,
+case
+    when position('acute renal failure' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Acute_Renal_Failure,
+case
+    when position('arrhythmia' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Arrhythmia,
+case
+    when position('asthma or emphysema' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Asthma_Emphysema,
+case when position('cancer' in di.diagnosisstring) > 0 then 1 else 0 end                    as Cancer,
+case
+    when position('cardiac arrest' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Cardiac_Arrest,
+case
+    when position('cardiogenic shock' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Cardiogenic_Shock,
+case
+    when position('cardiovascular (medical)' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Cardiovascular_Medical,
+case
+    when position('cardiovascular (other)' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Cardiovascular_Other,
+case
+    when position('cerebrovascular accident/stroke' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Cerebrovascular_Accident_Stroke_admissiondx,
+case
+    when position('chest pain unknown origin' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Chest_Pain_Unknown_Origin,
+case when position('coma' in di.diagnosisstring) > 0 then 1 else 0 end                      as Coma,
+case
+    when position('coronary artery bypass graft' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Coronary_Artery_Bypass_Graft,
+case
+    when position('diabetic ketoacidosis' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Diabetic_Ketoacidosis,
+case
+    when position('gastrointestinal bleed' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Gastrointestinal_Bleed,
+case
+    when position('gastrointestinal obstruction' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Gastrointestinal_Obstruction,
+case
+    when position('neurologic' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Neurologic,
+case when position('overdose' in di.diagnosisstring) > 0 then 1 else 0 end                  as Overdose,
+case
+    when position('pneumonia' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Pneumonia,
+case
+    when position('respiratory (medical/other)' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Respiratory_Medical_Other,
+case when position('sepsis' in di.diagnosisstring) > 0 then 1 else 0 end                    as Sepsis,
+case
+    when position('thoracotomy' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Thoracotomy,
+case when position('trauma' in di.diagnosisstring) > 0 then 1 else 0 end                    as Trauma,
+case
+    when position('valve disease' in di.diagnosisstring) > 0 then 1
+    else 0 end                                                                              as Valve_Disease,
+--        入院诊断
+pa.hospitaladmitsource                                                                      as admitsource,
+--       患者基本信息
+pa.age,
+pa.gender,
+pa.admissionweight / pow(pa.admissionheight / 100, 2)                                       as BMI,
+--        患者最终结果
+PA.hospitaldischargestatus                                                                  AS label,
+--      患者入院评分
+aps.apachescore                                                                             as admission_score,
+case when position('albumin' in lower(labname)) > 0 then labresult else -1 end              as Albumin,
+case when position('aLT' in lower(labname)) > 0 then labresult else -1 end                  as ALT,
+case when position('aST' in lower(labname)) > 0 then labresult else -1 end                  as AST,
+case when position('base excess' in lower(labname)) > 0 then labresult else -1 end          as Base_excess,
+case when position('basos' in lower(labname)) > 0 then labresult else -1 end                as Basos,
+case when position('bicarbonate hCO3' in lower(labname)) > 0 then labresult else -1 end     as Bicarbonate_HCO3,
+case when position('bilirubin' in lower(labname)) > 0 then labresult else -1 end            as Bilirubin,
+case when position('bun' in lower(labname)) > 0 then labresult else -1 end                  as BUN,
+case when position('calcium' in lower(labname)) > 0 then labresult else -1 end              as Calcium,
+case when position('creatinine' in lower(labname)) > 0 then labresult else -1 end           as Creatinine,
+case when position('eos' in lower(labname)) > 0 then labresult else -1 end                  as Eos,
+case when position('fiO2' in lower(labname)) > 0 then labresult else -1 end                 as FiO2,
+case when position('heart rate' in lower(labname)) > 0 then labresult else -1 end           as Heart_rate,
+case when position('inr' in lower(labname)) > 0 then labresult else -1 end                  as INR,
+case when position('magnesium' in lower(labname)) > 0 then labresult else -1 end            as Magnesium,
+case when position('pacO2' in lower(labname)) > 0 then labresult else -1 end                as PaCO2,
+case when position('paO2' in lower(labname)) > 0 then labresult else -1 end                 as PaO2,
+case when position('platelets' in lower(labname)) > 0 then labresult else -1 end            as Platelets,
+case when position('potassium' in lower(labname)) > 0 then labresult else -1 end            as Potassium,
+case when position('pTT' in lower(labname)) > 0 then labresult else -1 end                  as PTT,
+case when position('sodium' in lower(labname)) > 0 then labresult else -1 end               as Sodium,
+case when position('peep' in lower(labname)) > 0 then labresult else -1 end                 as PEEP,
+case when position('mean airway pressure' in lower(labname)) > 0 then labresult else -1 end as Mean_airway_pressure,
+case when position('plateau pressure' in lower(labname)) > 0 then labresult else -1 end     as Plateau_pressure,
+case when position('tidal volume/ibw' in lower(labname)) > 0 then labresult else -1 end     as Tidal_volume_IBW,
+case when position('wbc' in lower(labname)) > 0 then labresult else -1 end                  as WBC
+from patient as pa
+         left join medication as me on me.patientunitstayid = pa.patientunitstayid
+         left join infusiondrug as infu on infu.patientunitstayid = pa.patientunitstayid
+         left join treatment as tr on tr.patientunitstayid = pa.patientunitstayid
+         left join diagnosis as di on di.patientunitstayid = pa.patientunitstayid
+         left join apachepatientresult as aps on aps.patientunitstayid = pa.patientunitstayid
+         left join lab as lb on lb.patientunitstayid = pa.patientunitstayid
+where pa.patientunitstayid = 141229
+  and di.diagnosisoffset > 0
+  and lb.labresultoffset > 0
+order by pa.hospitaladmittime24 asc
+limit 1;
+
+select lb.labresult as result
+from lab as lb
+where position('albumin' in lb.labname) > 0
+  and lb.patientunitstayid = 141229
+union
+select apv.albumin as result
+from apacheapsvar as apv
+where apv.patientunitstayid = 141229
+  and apv.albumin > 0
+order by result;
+
+select labname as name, labresultoffset as time, labresult as result
+from lab as lb
+where lb.patientunitstayid = 141229
+  and labresultoffset > 0
+  and (lb.labresult > 0 and (
+            position('albumin' in lower(lb.labname)) > 0 or
+            position('alt' in lower(lb.labname)) > 0 or
+            position('ast' in lower(lb.labname)) > 0 or
+            position('base excess' in lower(lb.labname)) > 0 or
+            position('basos' in lower(lb.labname)) > 0 or
+            position('bicarbonate' in lower(lb.labname)) > 0 or
+            position('hco3' in lower(lb.labname)) > 0 or
+            position('bilirubin' in lower(lb.labname)) > 0 or
+            position('bun' in lower(lb.labname)) > 0 or
+            position('calcium' in lower(lb.labname)) > 0 or
+            position('creatinine' in lower(lb.labname)) > 0 or
+            position('eos' in lower(lb.labname)) > 0 or
+            position('fio2' in lower(lb.labname)) > 0 or
+            position('heart rate' in lower(lb.labname)) > 0 or
+            position('inr' in lower(lb.labname)) > 0 or
+            position('magnesium' in lower(lb.labname)) > 0 or
+            position('paco2' in lower(lb.labname)) > 0 or
+            position('pao2' in lower(lb.labname)) > 0 or
+            position('platelets' in lower(lb.labname)) > 0 or
+            position('potassium' in lower(lb.labname)) > 0 or
+            position('ptt' in lower(lb.labname)) > 0 or
+            position('sodium' in lower(lb.labname)) > 0 or
+            position('peep' in lower(lb.labname)) > 0 or
+            position('glucose' in lower(lb.labname)) > 0 or
+            position('lactate' in lower(lb.labname)) > 0 or
+            position('ph' in lower(lb.labname)) > 0 or
+            position('respiratory rate' in lower(lb.labname)) > 0 or
+            position('temperature' in lower(lb.labname)) > 0 or
+            position('wbc' in lower(lb.labname)) > 0
+    ))
+union
+select cl.labothername as name, cl.labotheroffset as time, cast(cl.labotherresult as numeric) as result
+from customlab as cl
+where cl.patientunitstayid = 141229
+  and cl.labotheroffset > 0
+  and (cl.labotherresult > '0' and
+       (position('albumin' in lower(cl.labothername)) > 0 or
+        position('glucose' in lower(cl.labothername)) > 0 or
+        position('hemoglobin' in lower(cl.labothername)) > 0 or
+        position('ionized calcium' in lower(cl.labothername)) > 0 or
+        position('lactate' in lower(cl.labothername)) > 0 or
+        position('pip' in lower(cl.labothername)) > 0 or
+        position('ph' in lower(cl.labothername)) > 0 or
+        position('lactate' in lower(cl.labothername)) > 0 or
+        position('bilirubin' in lower(cl.labothername)) > 0 or
+        position('wbc' in lower(cl.labothername)) > 0
+           )
+    )
+union
+select nc.nursingchartcelltypevalname        as name,
+       nc.nursingchartoffset                 as time,
+       cast(nc.nursingchartvalue as numeric) as result
+from nursecharting as nc
+where nc.patientunitstayid = 141229
+  and nursingchartoffset > 0
+  and (nc.nursingchartvalue > '0' and (
+        (position('temperature' in lower(nc.nursingchartcelltypevalname)) > 0 and
+         position('temperature location' in lower(nc.nursingchartcelltypevalname)) <= 0) or
+        position('non-invasive bp' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('motor response' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('verbal response' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('glasgow coma score' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('co2' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('invasive bp' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('eye opening' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('spo2' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('cvp' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('glucose' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('gcs total' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('invasive bp diastolic' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('invasive bp mean' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('heart rate' in lower(nc.nursingchartcelltypevalname)) > 0 or
+        position('respiratory rate' in lower(nc.nursingchartcelltypevalname)) > 0
+    ))
+union
+select pe.physicalexamvalue as name, pe.physicalexamoffset as time, cast(pe.physicalexamtext as numeric) as result
+from physicalexam as pe
+where pe.patientunitstayid = 141229
+  and physicalexamoffset > 0
+  and (pe.physicalexamtext > '0')
+  and (
+            position('bp (diastolic)' in lower(pe.physicalexamvalue)) > 0 or
+            position('bp (systolic)' in lower(pe.physicalexamvalue)) > 0 or
+            position('cvp' in lower(pe.physicalexamvalue)) > 0 or
+            position('fio2%' in lower(pe.physicalexamvalue)) > 0 or
+            position('peep' in lower(pe.physicalexamvalue)) > 0
+    )
+union
+select rc.respchartvaluelabel as name, rc.respchartoffset as time, cast(rc.respchartvalue as numeric) as result
+from respiratorycharting as rc
+where rc.patientunitstayid = 141229
+  and respchartoffset > 0
+  and (rc.respchartvalue > '0')
+  and (
+            position('respiratory rate' in lower(rc.respchartvaluelabel)) > 0 or
+            position('etco2' in lower(rc.respchartvaluelabel)) > 0 or
+            position('fio2' in lower(rc.respchartvaluelabel)) > 0 or
+            position('sao2' in lower(rc.respchartvaluelabel)) > 0 or
+            position('fio2' in lower(rc.respchartvaluelabel)) > 0 or
+            position('peep' in lower(rc.respchartvaluelabel)) > 0
+    )
+order by name asc, time asc;
+
+select distinct PE.physicalexamvalue
+from physicalexam as pe
+ORDER BY PE.physicalexamvalue;
+
+select distinct l1.patientunitstayid
+from lab as l1
+where position('peep' in lower(l1.labname)) > 0
+  and l1.labresult >= 5
+union
+select distinct rc.patientunitstayid
+from respiratorycharting as rc
+where position('peep' in lower(rc.respchartvaluelabel)) > 0
+  and rc.respchartvalue >= '5'
+union
+select distinct pe.patientunitstayid
+from physicalexam as pe
+where position('peep' in lower(pe.physicalexamvalue)) > 0
+  and pe.physicalexamtext > '5';
+
+select lb.patientunitstayid, lb.labresultoffset as time, lb.labname as name, lb.labresult as result
+from lab as lb
+where (position('pao2' in lower(lb.labname)) > 0
+    or position('fio2' in lower(lb.labname)) > 0)
+  and lb.labresultoffset > 0
+union
+select rc.patientunitstayid,
+       rc.respchartoffset                 as time,
+       rc.respchartvaluelabel             as name,
+       cast(rc.respchartvalue as numeric) as result
+from respiratorycharting as rc
+where position('fio2' in lower(rc.respchartvaluelabel)) > 0
+  and position('%' in rc.respchartvalue) = 0
+  and rc.respchartoffset > 0
+union
+select pe.patientunitstayid,
+       pe.physicalexamoffset                as time,
+       pe.physicalexamvalue                 as name,
+       cast(pe.physicalexamtext as numeric) as result
+from physicalexam as pe
+where position('fio2' in lower(pe.physicalexamvalue)) > 0
+  and pe.physicalexamoffset > 0
+order by patientunitstayid asc, time asc, name asc;
+
+select *
+from lab
+where position('basos' in lower(lab.labname)) > 0;
+
+
+select distinct diagnosis.diagnosisstring
+from diagnosis
+where diagnosis.diagnosisoffset > 0
+  and position('coma' in lower(diagnosis.diagnosisstring)) > 0;
+
+select admissiondx.admitdxname
+from admissiondx
+where admissiondx.patientunitstayid = 3351092
+  and admissiondx.admitdxenteredoffset > 0;
+
+select distinct patient.hospitaladmitsource
+from patient;
+
+select case when position('dobutamine' in lower(infu.drugname)) > 0 then 1 else 0 end     as dobutamine,
+       case when position('dopamine' in lower(infu.drugname)) > 0 then 1 else 0 end       as Dopamine,
+       case
+           when position('epinephrine ' in lower(infu.drugname)) > 0 then 1
+           else 0 end                                                                     as epinephrine,
+       case when position('heparin' in lower(infu.drugname)) > 0 then 1 else 0 end        as Heparin,
+       case
+           when position('milrinone' in lower(infu.drugname)) > 0 then 1
+           else 0 end                                                                     as Milrinone,
+       case
+           when position('norepinephrine' in lower(infu.drugname)) > 0 then 1
+           else 0 end                                                                     as Norepinephrine,
+       case
+           when position('phenylephrine' in lower(infu.drugname)) > 0 then 1
+           else 0 end                                                                     as phenylephrine,
+       case
+           when position('vasopressin' in lower(infu.drugname)) > 0 then 1
+           else 0 end                                                                     as vasopressin,
+       case
+           when position('vasopressor' in lower(tr.treatmentstring)) > 0 then 1
+           else 0 end                                                                     as Vasopressor,
+       case
+           when position('acute coronary syndrome' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Acute_Coronary_Syndrome_diagnosis,
+       case
+           when position('acute myocardial infarction' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Acute_Myocardial_Infarction,
+       case
+           when position('acute renal failure' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Acute_Renal_Failure,
+       case
+           when position('arrhythmia' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Arrhythmia,
+       case
+           when position('asthma' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Asthma_Emphysema,
+       case when position('cancer' in lower(di.diagnosisstring)) > 0 then 1 else 0 end    as Cancer,
+       case
+           when position('cardiac arrest' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Cardiac_Arrest,
+       case
+           when position('shock' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Cardiogenic_Shock,
+       case
+           when position('cardiovascular medical' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Cardiovascular_Medical,
+       case
+           when position('pericardial' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Cardiovascular_Other,
+       case
+           when position('stroke' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Cerebrovascular_Accident_Stroke,
+       case
+           when position('chest pain' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Chest_Pain_Unknown_Origin,
+       case when position('endocrine' in lower(di.diagnosisstring)) > 0 then 1 else 0 end as Coma,
+       case
+           when position('cabg' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Coronary_Artery_Bypass_Graft,
+       case
+           when position('ketoacidosis' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Diabetic_Ketoacidosis,
+       case
+           when position('bleeding' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Gastrointestinal_Bleed,
+       case
+           when position('gi obstruction' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Gastrointestinal_Obstruction,
+       case
+           when position('neurologic' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Neurologic,
+       case when position('overdose' in lower(di.diagnosisstring)) > 0 then 1 else 0 end  as Overdose,
+       case
+           when position('pneumonia' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Pneumonia,
+       case
+           when position('respiratory' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Respiratory_Medical_Other,
+       case when position('sepsis' in lower(di.diagnosisstring)) > 0 then 1 else 0 end    as Sepsis,
+       case
+           when position('thoracotomy' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Thoracotomy,
+       case when position('trauma' in lower(di.diagnosisstring)) > 0 then 1 else 0 end    as Trauma,
+       case
+           when position('valve' in lower(di.diagnosisstring)) > 0 then 1
+           else 0 end                                                                     as Valve_Disease,
+       pa.hospitaladmitsource                                                             as admitsource,
+       pa.age,
+       pa.gender,
+       pa.admissionweight / pow(pa.admissionheight / 100, 2)                              as BMI,
+       pa.hospitaldischargestatus                                                         as status,
+       aps.apachescore
+from patient as pa
+         left join medication as me on me.patientunitstayid = pa.patientunitstayid
+         left join infusiondrug as infu on infu.patientunitstayid = pa.patientunitstayid
+         left join treatment as tr on tr.patientunitstayid = pa.patientunitstayid
+         left join diagnosis as di on di.patientunitstayid = pa.patientunitstayid
+         left join apachepatientresult as aps on aps.patientunitstayid = pa.patientunitstayid
+         left join lab as lb on lb.patientunitstayid = pa.patientunitstayid
+where pa.patientunitstayid = 3351092
+order by pa.hospitaladmittime24 asc
+limit 1;
+
+select case when vp.temperature > 0 then vp.temperature else 0 end as temperature,
+       case when vp.sao2 > 0 then vp.sao2 else 0 end               as sao2,
+       case when vp.heartrate > 0 then vp.heartrate else 0 end     as heart,
+       case when vp.respiration > 0 then vp.respiration else 0 end as respiratory,
+       case when vp.cvp > 0 then vp.cvp else 0 end                 as cvp,
+       case when vp.etco2 > 0 then vp.etco2 else 0 end             as etco2,
+       case when vp.padiastolic > 0 then vp.padiastolic else 0 end as pap_diastolic,
+       case when vp.pasystolic > 0 then vp.pasystolic else 0 end   as pap_systolic,
+       case when vp.pamean > 0 then vp.pamean else 0 end           as pap_mean,
+       vp.observationoffset                                        as time
+from vitalperiodic as vp
+where vp.patientunitstayid = 3351092
+  and vp.observationoffset > 0;
+
+select distinct pa.labname
+from lab as pa
+where position('bicarbonate' in lower(pa.labname)) > 0;
+
+select pa.hospitaldischargeoffset, pa.hospitaladmitoffset
+from patient as pa
+where (hospitaldischargeoffset - hospitaladmitoffset) / 1440 > 1000;
+
+
+select (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440, pa.unitdischargeoffset / 1440
+from patient as pa
+where pa.patientunitstayid = 251140;
+
+select distinct rc.respchartvaluelabel
+from respiratorycharting as rc;
+
+select *
+from patient
+where patientunitstayid = 232188
+order by patient.hospitaladmittime24 asc;
+
+select labresultoffset as time, labname as name, labresult as value
+from lab
+where lab.patientunitstayid = 232188
+  and ((lab.labname = 'paO2')
+    or (lab.labname = 'FiO2'))
+  and lab.labresultoffset > 0
+  and lab.labresultoffset < 1440
+order by time asc;
+
+show work_mem;
+
+SELECT datname, temp_files AS "Temporary files", temp_bytes AS "Size of temporary files"
+FROM pg_stat_database;
+
+SELECT slot_name,
+       pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS replicationSlotLag,
+       active
+FROM pg_replication_slots;
+
+SELECT *
+FROM pg_replication_slots;
+
+SELECT *
+FROM pg_stat_all_tables
+WHERE relname = 'eicu';
+
+SELECT pg_size_pretty(pg_database_size('eicu'));
+
+SELECT pg_size_pretty(SUM(pg_relation_size(oid)))
+FROM pg_class;
+
+select case when infu.drugname like '%warfarin%' then 1 else 0 end         as warfarin,
+       case when infu.drugname like '%dobutamine%' then 1 else 0 end       as dobutamine,
+       case when infu.drugname like '%dopamine%' then 1 else 0 end         as Dopamine,
+       case when infu.drugname like '%epinephrine%' then 1 else 0 end      as epinephrine,
+       case when infu.drugname like '%heparin%' then 1 else 0 end          as Heparin,
+       case when infu.drugname like '%milrinone%' then 1 else 0 end        as Milrinone,
+       case when infu.drugname like '%norepinephrine%' then 1 else 0 end   as Norepinephrine,
+       case when infu.drugname like '%phenylephrine%' then 1 else 0 end    as phenylephrine,
+       case when infu.drugname like '%vasopressin%' then 1 else 0 end      as vasopressin,
+       case when infu.drugname like '%vasopressor%' then 1 else 0 end      as Vasopressor,
+       case
+           when di.diagnosisstring like '%acute coronary syndrome%' then 1
+           else 0 end                                                      as Acute_Coronary_Syndrome_diagnosis,
+       case
+           when di.diagnosisstring like '%acute myocardial infarction%' then 1
+           else 0 end                                                      as Acute_Myocardial_Infarction,
+       case when di.diagnosisstring like '%acute%' then 1 else 0 end       as Acute_Renal_Failure,
+       case when di.diagnosisstring like '%arrhythmia%' then 1 else 0 end  as Arrhythmia,
+       case when di.diagnosisstring like '%asthma%' then 1 else 0 end      as Asthma_Emphysema,
+       case when di.diagnosisstring like '%cancer%' then 1 else 0 end      as Cancer,
+       case when di.diagnosisstring like '%cardiac%' then 1 else 0 end     as Cardiac_Arrest,
+       case when di.diagnosisstring like '%shock%' then 1 else 0 end       as Cardiogenic_Shock,
+       case
+           when di.diagnosisstring like '%cardiovascular%' then 1
+           else 0 end                                                      as Cardiovascular_Medical,
+       case
+           when di.diagnosisstring like '%pericardial%' then 1
+           else 0 end                                                      as Cardiovascular_Other,
+       case when di.diagnosisstring like '%stroke%' then 1 else 0 end      as Cerebrovascular_Accident_Stroke,
+       case when di.diagnosisstring like '%chest%' then 1 else 0 end       as Chest_Pain_Unknown_Origin,
+       case when di.diagnosisstring like '%endocrine%' then 1 else 0 end   as Coma,
+       case when di.diagnosisstring like '%cabg%' then 1 else 0 end        as Coronary_Artery_Bypass_Graft,
+       case
+           when di.diagnosisstring like '%ketoacidosis%' then 1
+           else 0 end                                                      as Diabetic_Ketoacidosis,
+       case when di.diagnosisstring like '%bleeding%' then 1 else 0 end    as Gastrointestinal_Bleed,
+       case
+           when di.diagnosisstring like '%gi obstruction%' then 1
+           else 0 end                                                      as Gastrointestinal_Obstruction,
+       case when di.diagnosisstring like '%neurologic%' then 1 else 0 end  as Neurologic,
+       case when di.diagnosisstring like '%overdose%' then 1 else 0 end    as Overdose,
+       case when di.diagnosisstring like '%pneumonia%' then 1 else 0 end   as Pneumonia,
+       case
+           when di.diagnosisstring like '%respiratory%' then 1
+           else 0 end                                                      as Respiratory_Medical_Other,
+       case when di.diagnosisstring like '%sepsis%' then 1 else 0 end      as Sepsis,
+       case when di.diagnosisstring like '%thoracotomy%' then 1 else 0 end as Thoracotomy,
+       case when di.diagnosisstring like '%trauma%' then 1 else 0 end      as Trauma,
+       case when di.diagnosisstring like '%valve%' then 1 else 0 end       as Valve_Disease
+from patient as pa
+         left join infusiondrug as infu on infu.patientunitstayid = pa.patientunitstayid
+         left join diagnosis as di on di.patientunitstayid = pa.patientunitstayid
+where pa.patientunitstayid = 699797;
+
+select diagnosisstring
+from diagnosis as di
+where lower(di.diagnosisstring) like '%neurologic%';
+
+select diagnosisstring
+from diagnosis as di
+where di.diagnosisstring like '%valve%'
+;
+
+select max(case when infu.drugname like 'Dobutamine%' then 1 else 0 end)     as dobutamine,
+       max(case when infu.drugname like 'Dopamine%' then 1 else 0 end)       as Dopamine,
+       max(case when infu.drugname like 'epinephrine%' then 1 else 0 end)    as epinephrine,
+       max(case when infu.drugname like 'Heparin%' then 1 else 0 end)        as Heparin,
+       max(case when infu.drugname like 'Milrinone%' then 1 else 0 end)      as Milrinone,
+       max(case when infu.drugname like 'Norepinephrine%' then 1 else 0 end) as Norepinephrine,
+       max(case when infu.drugname like 'Phenylephrine%' then 1 else 0 end)  as phenylephrine,
+       max(case when infu.drugname like 'Vasopressin%' then 1 else 0 end)    as vasopressin
+from infusiondrug as infu
+where infusionoffset <= 1440
+  and infusionoffset >= 0
+  and patientunitstayid = 699797
+group by patientunitstayid;
+
+select max(case when tr.treatmentstring like '%vasopressor%' then 1 else 0 end) as Vasopressor
+from treatment as tr
+where treatmentoffset >= 0
+  and treatmentoffset <= 1440
+  and patientunitstayid = 699797
+group by patientunitstayid;
+
+select max(case
+               when di.diagnosisstring like '%acute coronary syndrome%' then 1
+               else 0 end)                                                              as Acute_Coronary_Syndrome_diagnosis,
+       max(case
+               when di.diagnosisstring like '%acute myocardial infarction%' then 1
+               else 0 end)                                                              as Acute_Myocardial_Infarction,
+       max(case when di.diagnosisstring like '%acute renal failure%' then 1 else 0 end) as Acute_Renal_Failure,
+       max(case when di.diagnosisstring like '%arrhythmia%' then 1 else 0 end)          as Arrhythmia,
+       max(case when di.diagnosisstring like '%asthma%' then 1 else 0 end)              as Asthma_Emphysema,
+       max(case when di.diagnosisstring like '%cancer%' then 1 else 0 end)              as Cancer,
+       max(case when di.diagnosisstring like '%cardiac arrest%' then 1 else 0 end)      as Cardiac_Arrest,
+       max(case when di.diagnosisstring like '%cardiogenic shock%' then 1 else 0 end)   as Cardiogenic_Shock,
+       max(case when di.diagnosisstring like '%cardiovascular%' then 1 else 0 end)      as Cardiovascular_Medical,
+       max(case when di.diagnosisstring like '%pericardial%' then 1 else 0 end)         as Cardiovascular_Other,
+       max(case when di.diagnosisstring like '%stroke%' then 1 else 0 end)              as Cerebrovascular_Accident_Stroke,
+       max(case when di.diagnosisstring like '%chest pain%' then 1 else 0 end)          as Chest_Pain_Unknown_Origin,
+       max(case when di.diagnosisstring like '%coma%' then 1 else 0 end)                as Coma,
+       max(case when di.diagnosisstring like '%CABG%' then 1 else 0 end)                as Coronary_Artery_Bypass_Graft,
+       max(case when di.diagnosisstring like '%ketoacidosis%' then 1 else 0 end)        as Diabetic_Ketoacidosis,
+       max(case when di.diagnosisstring like '%bleeding%' then 1 else 0 end)            as Gastrointestinal_Bleed,
+       max(case when di.diagnosisstring like '%GI obstruction%' then 1 else 0 end)      as Gastrointestinal_Obstruction,
+       max(case when di.diagnosisstring like '%neurologic%' then 1 else 0 end)          as Neurologic,
+       max(case when di.diagnosisstring like '%overdose%' then 1 else 0 end)            as Overdose,
+       max(case when di.diagnosisstring like '%pneumonia%' then 1 else 0 end)           as Pneumonia,
+       max(case
+               when di.diagnosisstring like '%respiratory failure%' then 1
+               else 0 end)                                                              as Respiratory_Medical_Other,
+       max(case when di.diagnosisstring like '%sepsis%' then 1 else 0 end)              as Sepsis,
+       max(case when di.diagnosisstring like '%thoracotomy%' then 1 else 0 end)         as Thoracotomy,
+       max(case when di.diagnosisstring like '%trauma%' then 1 else 0 end)              as Trauma,
+       max(case when di.diagnosisstring like '%valve%' then 1 else 0 end)               as Valve_Disease
+from diagnosis as di
+where patientunitstayid = 699797
+  and di.diagnosisoffset >= 0
+  and diagnosisoffset <= 1440;
+
+select hospitaladmitsource                                       as admitsource,
+       age,
+       gender,
+       round(admissionweight / pow(admissionheight / 100, 2), 2) as BMI,
+       case
+           when pa.hospitaldischargestatus like '%Alive%' and
+                (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 1
+               then 'long stay'
+           when pa.hospitaldischargestatus like '%Alive%' and
+                (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 < 1
+               then 'spontaneous recovery'
+           when pa.hospitaldischargestatus like '%Expired%' and
+                (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 < 1
+               then 'icu-day Mortality'
+           when pa.hospitaldischargestatus like '%Expired%' and
+                (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 1 and
+                (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 < 1 then
+               'icu-day Mortality'
+           else 'hospital Mortality' end
+                                                                 as status
+from patient as pa
+where patientunitstayid = 2600557;
+
+select apachescore
+from apachepatientresult as aps
+where patientunitstayid = 2600557;
