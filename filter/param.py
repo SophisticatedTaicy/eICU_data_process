@@ -1,10 +1,98 @@
-USER="postgres"
-PASSWORD="123456"
-HOST="172.16.60.173"
-PORT="3307"
+USER = "postgres"
+PASSWORD = "123456"
+HOST = "172.16.60.173"
+PORT = "3307"
 
-DATABASE="eicu"
-SEARCH_PATH='eicu_crd'
+DATABASE = "eicu"
+SEARCH_PATH = 'eicu_crd'
 
-# DATABASE="zhuda"
-# SEARCH_PATH='test'
+# 初始化特征数据为0，一共200维数据，其中
+# 静态数据维度41维，分别为10种药物使用情况、25种疾病患否情况、患者入院来源、患者年龄、患者性别、患者BMI身体健康素质指数、患者最终结果（存活，死亡）以及患者入院Apache评分，
+# todo::动态数据199维，包含数据信息统计表中53项动态生物特征的中位数、方差和变化率共159项数据、ALP、GCS(intub)、GCS(unable)、Hematocrit以及SpO2五项尚未找到
+# 先对200维数据初始化为0
+sum_list = ['id', 'warfarin',
+            'dobutamine', 'Dopamine', 'epinephrine', 'Heparin', 'Milrinone', 'Norepinephrine', 'phenylephrine',
+            'vasopressin',
+            'Vasopressor',
+            'Acute_Coronary_Syndrome_diagnosis', 'Acute_Myocardial_Infarction', 'Acute_Renal_Failure', 'Arrhythmia',
+            'Asthma_Emphysema',
+            'Cancer',
+            'Cardiac_Arrest', 'Cardiogenic_Shock', 'Cardiovascular_Medical', 'Cardiovascular_Other',
+            'Cerebrovascular_Accident_Stroke', 'Chest_Pain_Unknown_Origin', 'Coma',
+            'Coronary_Artery_Bypass_Graft',
+            'Diabetic_Ketoacidosis', 'Gastrointestinal_Bleed', 'Gastrointestinal_Obstruction',
+            'Neurologic',
+            'Overdose', 'Pneumonia', 'Respiratory_Medical_Other', 'Sepsis', 'Thoracotomy', 'Trauma',
+            'Valve_Disease', 'others_diease', 'admitsource', 'age', 'gender', 'BMI', 'status', 'admission_score',
+            'Albumin_median', 'ALT (SGPT)_median', 'AST (SGOT)_median', '-bands_median',
+            'Base Excess_median', '-basos_median', 'bicarbonate_median', 'total bilirubin_median',
+            'BUN_median', 'calcium_median', 'Total CO2_median', 'creatinine_median', '-eos_median',
+            'FiO2_median', 'glucose_median', 'Hemoglobin_median', 'PT - INR_median',
+            'ionized calcium_median', 'lactate_median', 'magnesium_median', 'paCO2_median',
+            'PaO2_median',
+            'P/F ratio_median', 'PEEP_median', 'pH_median', 'platelets x 1000_median',
+            'potassium_median',
+            'PTT_median', 'sodium_median', 'Temperature_median', 'WBC x 1000_median',
+            'Mean airway pressure_median', 'Plateau Pressure_median', 'SaO2_median',
+            'Tidal Volume (set)_median', 'cvp_median', 'etCO2_median', 'padiastolic_median',
+            'pamean_median', 'pasystolic_median', 'Eyes_median', 'GCS Total_median', 'Motor_median',
+            'Verbal_median', 'Heart Rate_median', 'Invasive BP Diastolic_median',
+            'Invasive BP Mean_median',
+            'Invasive BP Systolic_median', 'Non-Invasive BP Diastolic_median', 'Non-Invasive BP Mean_median',
+            'Non-Invasive BP Systolic_median', 'Respiratory rate_median', 'PIP_median',
+            'Albumin_variances',
+            'ALT (SGPT)_variances', 'AST (SGOT)_variances', '-bands_variances', 'Base Excess_variances',
+            '-basos_variances', 'bicarbonate_variances', 'total bilirubin_variances', 'BUN_variances',
+            'calcium_variances', 'Total CO2_variances', 'creatinine_variances', '-eos_variances',
+            'FiO2_variances', 'glucose_variances', 'Hemoglobin_variances', 'PT - INR_variances',
+            'ionized calcium_variances', 'lactate_variances', 'magnesium_variances', 'paCO2_variances',
+            'PaO2_variances', 'P/F ratio_variances', 'PEEP_variances', 'pH_variances',
+            'platelets x 1000_variances', 'potassium_variances', 'PTT_variances', 'sodium_variances',
+            'Temperature_variances', 'WBC x 1000_variances', 'Mean airway pressure_variances',
+            'Plateau Pressure_variances', 'SaO2_variances', 'Tidal Volume (set)_variances',
+            'cvp_variances',
+            'etCO2_variances', 'padiastolic_variances', 'pamean_variances', 'pasystolic_variances',
+            'Eyes_variances', 'GCS Total_variances', 'Motor_variances', 'Verbal_variances',
+            'Heart Rate_variances', 'Invasive BP Diastolic_variances', 'Invasive BP Mean_variances',
+            'Invasive BP Systolic_variances', 'Non-Invasive BP Diastolic_variances',
+            'Non-Invasive BP Mean_variances', 'Non-Invasive BP Systolic_variances',
+            'Respiratory rate_variances',
+            'PIP_variances', 'Albumin_changerate', 'ALT (SGPT)_changerate', 'AST (SGOT)_changerate',
+            '-bands_changerate', 'Base Excess_changerate', '-basos_changerate', 'bicarbonate_changerate',
+            'total bilirubin_changerate', 'BUN_changerate', 'calcium_changerate', 'Total CO2_changerate',
+            'creatinine_changerate', '-eos_changerate', 'FiO2_changerate', 'glucose_changerate',
+            'Hemoglobin_changerate', 'PT - INR_changerate', 'ionized calcium_changerate',
+            'lactate_changerate', 'magnesium_changerate', 'paCO2_changerate', 'PaO2_changerate',
+            'P/F ratio_changerate', 'PEEP_changerate', 'pH_changerate', 'platelets x 1000_changerate',
+            'potassium_changerate', 'PTT_changerate', 'sodium_changerate', 'Temperature_changerate',
+            'WBC x 1000_changerate', 'Mean airway pressure_changerate', 'Plateau Pressure_changerate',
+            'SaO2_changerate', 'Tidal Volume (set)_changerate', 'cvp_changerate', 'etCO2_changerate',
+            'padiastolic_changerate', 'pamean_changerate', 'pasystolic_changerate', 'Eyes_changerate',
+            'GCS Total_changerate', 'Motor_changerate', 'Verbal_changerate', 'Heart Rate_changerate',
+            'Invasive BP Diastolic_changerate', 'Invasive BP Mean_changerate',
+            'Invasive BP Systolic_changerate',
+            'Non-Invasive BP Diastolic_changerate', 'Non-Invasive BP Mean_changerate',
+            'Non-Invasive BP Systolic_changerate', 'Respiratory rate_changerate', 'PIP_changerate']
+
+dynamic_list = ['Albumin', 'ALT (SGPT)', 'AST (SGOT)', '-bands', 'Base Excess', '-basos', 'bicarbonate',
+                'total bilirubin', 'BUN', 'calcium', 'Total CO2', 'creatinine', '-eos', 'FiO2', 'glucose',
+                'Hemoglobin', 'PT - INR', 'ionized calcium', 'lactate', 'magnesium', 'paCO2', 'PaO2', 'P/F ratio',
+                'PEEP', 'pH', 'platelets x 1000', 'potassium', 'PTT', 'sodium', 'Temperature', 'WBC x 1000',
+                'Mean airway pressure', 'Plateau Pressure', 'SaO2', 'Tidal Volume (set)', 'cvp', 'etCO2',
+                'padiastolic', 'pamean', 'pasystolic', 'Eyes', 'GCS Total', 'Motor',
+                'Verbal', 'Heart Rate', 'Invasive BP Diastolic', 'Invasive BP Mean',
+                'Invasive BP Systolic', 'Non-Invasive BP Diastolic', 'Non-Invasive BP Mean',
+                'Non-Invasive BP Systolic', 'Respiratory rate', 'PIP']
+
+# 所有静态数据的特征名
+static_list = ['warfarin', 'dobutamine', 'Dopamine', 'epinephrine', 'Heparin', 'Milrinone', 'Norepinephrine',
+               'phenylephrine',
+               'vasopressin', 'Vasopressor', 'Acute_Coronary_Syndrome_diagnosis', 'Acute_Myocardial_Infarction',
+               'Acute_Renal_Failure', 'Arrhythmia', 'Asthma_Emphysema', 'Cancer', 'Cardiac_Arrest',
+               'Cardiogenic_Shock',
+               'Cardiovascular_Medical', 'Cardiovascular_Other', 'Cerebrovascular_Accident_Stroke',
+               'Chest_Pain_Unknown_Origin',
+               'Coma', 'Coronary_Artery_Bypass_Graft', 'Diabetic_Ketoacidosis', 'Gastrointestinal_Bleed',
+               'Gastrointestinal_Obstruction',
+               'Neurologic', 'Overdose', 'Pneumonia', 'Respiratory_Medical_Other', 'Sepsis', 'Thoracotomy', 'Trauma',
+               'Valve_Disease', 'admitsource', 'age', 'gender', 'BMI', 'status', 'admission_score']
