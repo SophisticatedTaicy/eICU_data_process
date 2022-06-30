@@ -4,7 +4,7 @@ import numpy as np
 import psycopg2
 from pandas import DataFrame
 
-import Querysql
+import query_sql
 
 
 class MyThread(threading.Thread):
@@ -19,9 +19,9 @@ class MyThread(threading.Thread):
         for id in self.data:
             # print(str(id) + '住院记录p/f值计算中。。。。')
             # 用均值填充缺少的值
-            query = Querysql.Querysql()
+            query = query_sql.Querysql()
             data = query.filter_pf_by_id(id)
-            data = compute_p_f(data)
+            data = compute_pf(data)
             data = (id, data)
             dataframe = DataFrame(data)
             dataframe.to_csv('p_f.csv', mode='a')
@@ -63,7 +63,7 @@ def pf_value_filter(id_list_df):
 # 处理一个id对应的lab数据并返回处理后的数据
 def fill_with_pf(id):
     # 获取当前id对应的lab检查项
-    lab_list = Querysql.Querysql().filter_pf_by_id(id)
+    lab_list = query_sql.Querysql().filter_pf_by_id(id)
 
     # 当查到的lab记录只有一条时，直接剔除
     if len(lab_list) <= 1:
@@ -126,8 +126,9 @@ def fill_with_pf(id):
 
 
 # 计算每次住院记录中的p/f的中位数，方差以及变化率
-def compute_p_f(data):
-    # id time name value
+def compute_pf(data):
+
+    # time name value
     median = 0
     variance = 0
     changerate = 0
@@ -136,29 +137,28 @@ def compute_p_f(data):
     pao2 = 0
     fio2 = 0
     for item in data:
-        if item[2] == 'paO2' and not item[3] is None:
+        if item[1] == 'paO2' and not item[2] is None:
             pao2_count = pao2_count + 1
-            pao2 = item[3] + pao2
-        if item[2] == 'FiO2' and not item[3] is None:
+            pao2 = item[2] + pao2
+        if item[1] == 'FiO2' and not item[2] is None:
             fio2_count = fio2_count + 1
-            fio2 = item[3] + fio2
+            fio2 = item[2] + fio2
     # 只有pao2或者只有fio2时，三项数值置0
     if pao2_count == 0 or fio2_count == 0:
-        result = (median, variance, changerate)
-        return result
+        return None
 
     # 计算均值
     pao2 = round(pao2 / pao2_count, 2)
     fio2 = round(fio2 / fio2_count, 2)
     # 用均值填充缺省值
     for i in range(len(data)):
-        if data[i][2] == 'paO2' and (data[i][3] is None or data[i][3] == 0):
+        if data[i][1] == 'paO2' and (data[i][2] is None or data[i][2] == 0):
             data[i] = list(data[i])
-            data[i][3] = pao2
+            data[i][2] = pao2
             data[i] = tuple(data[i])
-        if data[i][2] == 'FiO2' and (data[i][3] is None or data[i][3] == 0):
+        if data[i][1] == 'FiO2' and (data[i][2] is None or data[i][2] == 0):
             data[i] = list(data[i])
-            data[i][3] = fio2
+            data[i][2] = fio2
             data[i] = tuple(data[i])
     p_f = []
     # 将空余位置的pao2或fio2值用后位置值替代
@@ -167,11 +167,11 @@ def compute_p_f(data):
         item_name = data[i][2]
         j = i + 1
         while j < len(data):
-            if data[j][2] != item_name:
-                if data[i][1] != data[j][1]:
+            if data[j][1] != item_name:
+                if data[i][0] != data[j][0]:
                     extra_item = data[j]
                     extra_item = list(extra_item)
-                    extra_item[1] = data[i][1]
+                    extra_item[0] = data[i][0]
                     extra_item = tuple(extra_item)
                     data.insert(i + 1, extra_item)
                 i = i + 1
@@ -199,45 +199,15 @@ def compute_p_f(data):
     while i + 1 < len(data):
         item_name = data[i][2]
         if item_name == 'pao2':
-            if data[i + 1][3] > 0:
-                p_f.append(data[i][3] / data[i + 1][3])
+            if data[i + 1][2] > 0:
+                p_f.append(('P/F ratio', round(data[i][2] / data[i + 1][2], 3), data[i][0]))
         else:
-            if data[i][3] > 0:
-                p_f.append(data[i + 1][3] / data[i][3])
+            if data[i][2] > 0:
+                p_f.append(('P/F ratio', round(data[i + 1][2] / data[i][2], 3), data[i][0]))
         i = i + 2
     # 将数值排序
     p_f.sort()
-    data = []
-    # 使用==0 筛选会出现筛选不全的情况
-    for item in p_f:
-        if item != 0:
-            data.append(item)
-    p_f = data
-    size = len(p_f)
-    if size == 0:
-        median = 0
-        changerate = 0
-        variance = 0
-        result = (median, variance, changerate)
-        return result
-    # 求p/f的中位数，方差以及变化率
-    if size == 1:
-        median = p_f[0]
-        changerate = 0
-        variance = 0
-        result = (median, variance, changerate)
-        return result
-
-    if (size % 2 == 1):
-        median = round(p_f[int(size / 2)], 2)
-    else:
-        median = round((p_f[int(size / 2)] + p_f[int(size / 2) - 1]) / 2, 2)
-    if np.min(p_f) == 0:
-        print(p_f)
-    changerate = round((np.max(p_f) - np.min(p_f)) / np.min(p_f), 2)
-    variance = round(np.var(p_f), 2)
-    result = (median, variance, changerate)
-    return result
+    return p_f
 
 
 if __name__ == '__main__':

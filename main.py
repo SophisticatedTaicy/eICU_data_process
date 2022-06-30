@@ -4,6 +4,9 @@
 # Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import csv
 import threading
+import time
+import datetime
+
 import psycopg2
 import pandas as pd
 from functools import reduce
@@ -11,11 +14,12 @@ from functools import reduce
 from pandas import DataFrame
 from tqdm import tqdm
 
-import Querysql
+import data_process
+import query_sql
 
 # 数据处理流程：
 # 根据
-import compute_dynamic_factor
+import init
 import pf_filter
 from filter.param import sum_list
 
@@ -31,22 +35,15 @@ class MyThread(threading.Thread):
         # print('%s区间数据在运行中-----------' % str(self.name))
         for id in self.data:
             # 住院记录对应的220维数据信息抽取
-            header = compute_dynamic_factor.init_dict(header=sum_list)
+            header = init.init_dict(header=sum_list)
             # 查询相关住院记录动态数据
-            query = Querysql.Querysql()
-            dynamic = query.filter_with_dynamic(id)
-            query = Querysql.Querysql()
+            query = query_sql.Query()
+            dynamic = query.filter_dynamic(id)
+            query = query_sql.Query()
             # 查询相关住院记录静态数据
-            query.find_static_data(id, header)
+            query.filter_static(id, header)
             # 计算动态数据的中位数、方差以及变化率
-            result_list = Querysql.compute_dynamic_factor(dynamic, header)
-            # 计算P/f的中位数，均值和方差
-            query = Querysql.Querysql()
-            data = query.filter_pf_by_id(id)
-            data = pf_filter.compute_p_f(data)
-            result_list['P/F ratio_median'] = data[0]
-            result_list['P/F ratio_variances'] = data[1]
-            result_list['P/F ratio_changerate'] = data[2]
+            result_list = query_sql.compute_dynamic(dynamic, header)
             # 最终住院记录数据转换为dataframe
             data = DataFrame([result_list])
             # 数据追加写入文件
@@ -74,6 +71,7 @@ if __name__ == '__main__':
     # temp.to_csv('temp.csv', encoding='utf-8')
 
     # # 找到所有患者的pao2,fio2的值
+
     # p_fs = find_all_features.filter_w
     # ith_pao2_or_fio2(cursor)
 
@@ -83,7 +81,10 @@ if __name__ == '__main__':
 
     # 多线程抽取数据
     # 最终住院记录id提取
-    result = pd.read_csv('result_id.csv', sep=',')
+    start = time.time()
+    print('开始时间 ： ' + str(datetime.datetime.now()))
+    # result = pd.read_csv('result_id.csv', sep=',')
+    result = pd.read_csv('result.csv', sep=',')
     df = DataFrame(result)
     df_list = []
 
@@ -99,3 +100,6 @@ if __name__ == '__main__':
     with open('result.csv', mode='a') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=sum_list)
         writer.writeheader()
+    end = time.time()
+    total = (end - start) / 60
+    print('结束时间 ： ' + str(datetime.datetime.now()) + '程序运行花费了' + str(time.time() - start) + '秒')

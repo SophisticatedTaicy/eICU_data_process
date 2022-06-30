@@ -7,10 +7,11 @@ import numpy as np
 from decimal import Decimal
 import psycopg2
 
+import pf_filter
 from filter.param import DATABASE, USER, PASSWORD, HOST, PORT, SEARCH_PATH, sum_list, dynamic_list, static_list
 
 
-class Querysql:
+class Query:
     def __init__(self):
         self.database = DATABASE
         self.user = USER
@@ -119,7 +120,7 @@ class Querysql:
         self.connection.close()
         return data
 
-    def filter_pf_by_id(self, id):
+    def filter_pf(self, id):
         cursor = self.connection.cursor()
         sql = "set search_path to " + self.search_path + ";"
         cursor.execute(sql)
@@ -133,6 +134,32 @@ class Querysql:
               " order by time asc"
         cursor.execute(sql)
         list = cursor.fetchall()
+        sql = " select case when pao2>0 then pao2 end, " \
+              " case when fio2 > 0 then pao2 end" \
+              " from apacheapsvar" \
+              " where patientunitstayid = " + str(id) + ";"
+        cursor.execute(sql)
+        apacheapsvar = cursor.fetchall()
+
+        for item in apacheapsvar:
+            if item[0] > 0:
+                list.append(['paO2', item[0], 1])
+            if item[1] > 0:
+                list.append(['FiO2', item[1], 1])
+
+        sql = " select rc.patientunitstayid," \
+              " rc.respchartoffset                 as time," \
+              " rc.respchartvaluelabel             as name," \
+              " cast(rc.respchartvalue as numeric) as result" \
+              " from respiratorycharting as rc" \
+              " where rc.respchartvaluelabel = 'FiO2'" \
+              " and rc.respchartvalue not like '%\%%' " \
+              " and rc.respchartoffset > 0" \
+              " order by patientunitstayid asc, time asc, name asc;"
+        cursor.execute(sql)
+        fio2_list = cursor.fetchall()
+        for item in fio2_list:
+            list.append(item)
         cursor.close()
         self.connection.close()
         return list
@@ -164,9 +191,9 @@ class Querysql:
         data = DataFrame(list)
         return data
 
-    # todo::find out details for ALP,GCS(intub),GCS(unable),Hematocrit and Spo2
+    # todo::find out details for ALP,GCS(intub),GCS(unable) and Spo2
     # find all dynamic data for each unit stay record
-    def filter_with_dynamic(self, unitid):
+    def filter_dynamic(self, unitid):
         # find dynamic item in lab table
         cursor = self.connection.cursor()
         sql = "set search_path to " + self.search_path + ";"
@@ -175,39 +202,39 @@ class Querysql:
               " from lab as lb" \
               " where lb.patientunitstayid=" + str(unitid) + \
               " and labresultoffset > 0" \
-              " and (lb.labresult > 0 and (" \
-              "    lb.labname = 'Albumin' or" \
-              "    lb.labname='ALT (SGPT)'        or" \
-              "    lb.labname='AST (SGOT)'        or" \
-              "    lb.labname='-bands'         or" \
-              "    lb.labname='Base Excess'        or" \
-              "    lb.labname='-basos'        or" \
-              "    lb.labname='bicarbonate'        or" \
-              "    lb.labname='HCO3'        or" \
-              "    lb.labname='total bilirubin'        or" \
-              "    lb.labname='BUN'      or " \
-              "    lb.labname='calcium'        or" \
-              "    lb.labname='Total CO2'        or" \
-              "    lb.labname='creatinine'       or" \
-              "    lb.labname='-eos'        or" \
-              "    lb.labname='FiO2'         or" \
-              "    lb.labname='glucose'      or " \
-              "    lb.labname='bedside glucose'        or" \
-              "    lb.labname='Carboxyhemoglobin'        or" \
-              "    lb.labname='Methemoglobin'        or" \
-              "    lb.labname='ionized calcium'        or" \
-              "    lb.labname='lactate'        or" \
-              "    lb.labname='magnesium'     or  " \
-              "    lb.labname='paCO2'        or" \
-              "    lb.labname='PaO2'        or" \
-              "    lb.labname='PEEP'        or" \
-              "    lb.labname='pH'        or" \
-              "    lb.labname='platelets x 1000'       or" \
-              "    lb.labname='potassium'          or" \
-              "    lb.labname='PTT'         or" \
-              "    lb.labname='sodium'        or" \
-              "    lb.labname='Temperature'         or" \
-              "    lb.labname='WBC x 1000'      ))" \
+              " and (lb.labresult > 0 and lb.labname in (" \
+              "     'Albumin' " \
+              "    ,'ALT (SGPT)'        " \
+              "    ,'AST (SGOT)'        " \
+              "    ,'-bands'         " \
+              "    ,'Base Excess'        " \
+              "    ,'-basos'        " \
+              "    ,'bicarbonate'        " \
+              "    ,'HCO3'        " \
+              "    ,'total bilirubin'      " \
+              "    ,'BUN'     " \
+              "    ,'calcium'      " \
+              "    ,'Total CO2'      " \
+              "    ,'creatinine'     " \
+              "    ,'-eos'      " \
+              "    ,'FiO2'       " \
+              "    ,'glucose'     " \
+              "    ,'bedside glucose'      " \
+              "    ,'Carboxyhemoglobin'      " \
+              "    ,'Methemoglobin'      " \
+              "    ,'ionized calcium'      " \
+              "    ,'lactate'      " \
+              "    ,'magnesium'     " \
+              "    ,'paCO2'        " \
+              "    ,'paO2'        " \
+              "    ,'PEEP'        " \
+              "    ,'pH'        " \
+              "    ,'platelets x 1000'       " \
+              "    ,'potassium'          " \
+              "    ,'PTT'         " \
+              "    ,'sodium'        " \
+              "    ,'Temperature'         " \
+              "    ,'WBC x 1000'      ))" \
               " and lb.labresult <= 1440;"
         cursor.execute(sql)
         lab_list = cursor.fetchall()
@@ -230,19 +257,19 @@ class Querysql:
               " where nc.patientunitstayid =" + str(unitid) + \
               "  and nursingchartoffset > 0" \
               "  and nursingchartoffset < 1440" \
-              "  and (nc.nursingchartvalue > '0' and (" \
-              "   nc.nursingchartcelltypevalname='Eyes'     or" \
-              "   nc.nursingchartcelltypevalname='GCS Total'     or" \
-              "   nc.nursingchartcelltypevalname='Motor'      or" \
-              "   nc.nursingchartcelltypevalname='Verbal'      or" \
-              "   nc.nursingchartcelltypevalname='Heart Rate'     or" \
-              "   nc.nursingchartcelltypevalname='Non-Invasive BP Diastolic'     or" \
-              "   nc.nursingchartcelltypevalname='Non-Invasive BP Mean'     or" \
-              "   nc.nursingchartcelltypevalname='Non-Invasive BP Systolic'     or" \
-              "   nc.nursingchartcelltypevalname='Invasive BP Diastolic'     or" \
-              "   nc.nursingchartcelltypevalname='Invasive BP Mean'     or" \
-              "   nc.nursingchartcelltypevalname='Invasive BP Systolic'     or" \
-              "   nc.nursingchartcelltypevalname='respiratory rate'    " \
+              "  and (nc.nursingchartvalue > '0' and nc.nursingchartcelltypevalname in (" \
+              "    'Eyes'     " \
+              "   ,'GCS Total'     " \
+              "   ,'Motor'      " \
+              "   ,'Verbal'      " \
+              "   ,'Heart Rate'     " \
+              "   ,'Non-Invasive BP Diastolic'     " \
+              "   ,'Non-Invasive BP Mean'     " \
+              "   ,'Non-Invasive BP Systolic'     " \
+              "   ,'Invasive BP Diastolic'     " \
+              "   ,'Invasive BP Mean'     " \
+              "   ,'Invasive BP Systolic'     " \
+              "   ,'respiratory rate'    " \
               "    ))" \
               "  and nc.nursingchartvalue like '%[0-9]%';"
         cursor.execute(sql)
@@ -255,11 +282,13 @@ class Querysql:
               "  and respchartoffset > 0" \
               "  and respchartoffset < 1440 " \
               "  and (rc.respchartvalue > '0')" \
-              "  and (" \
-              "   rc.respchartvaluelabel='Mean airway pressure'          or" \
-              "   rc.respchartvaluelabel='SaO2'          or" \
-              "   rc.respchartvaluelabel='Tidal Volume (set)'          or" \
-              "   rc.respchartvaluelabel='Plateau Pressure' )" \
+              "  and rc.respchartvaluelabel in (" \
+              "   'Mean airway pressure'         " \
+              "   ,'FiO2'" \
+              "   ,'SaO2'          " \
+              "   ,'Tidal Volume (set)'          " \
+              "   ,'Plateau Pressure' )" \
+              " and rc.respchartvalue not like '%\%%' " \
               "order by name asc, result asc;"
         cursor.execute(sql)
         respchart_list = cursor.fetchall()
@@ -275,6 +304,26 @@ class Querysql:
               " and vp.observationoffset<1440 ;"
         cursor.execute(sql)
         vital = cursor.fetchall()
+
+        sql = " select case when hematocrit>0 then hematocrit end ," \
+              "        case when pao2>0 then pao2 end, " \
+              "        case when fio2>0 then pao2 end " \
+              " from apacheapsvar" \
+              " where patientunitstayid = " + str(unitid) + ";"
+        cursor.execute(sql)
+        apacheapsvar = cursor.fetchall()
+        apacheapsvar_list = []
+        for item in apacheapsvar:
+            if not item[0] is None:
+                if item[0] > 0:
+                    apacheapsvar_list.append(['hematocrit', Decimal(item[0]), 1])
+            if not item[1] is None:
+                if item[1] > 0:
+                    apacheapsvar_list.append(['paO2', Decimal(item[1]), 1])
+            if not item[2] is None:
+                if item[2] > 0:
+                    apacheapsvar_list.append(['FiO2', Decimal(item[2]), 1])
+
         cursor.close()
         self.connection.close()
         vital_list = []
@@ -287,14 +336,14 @@ class Querysql:
             if item[2] > 0:
                 vital_list.append(['pamean', item[2], item[-1]])
         # combine all dynamic item
-        result_list = lab_list + customlab_list + nurse_list + respchart_list + vital_list
+        result_list = lab_list + customlab_list + nurse_list + respchart_list + vital_list + apacheapsvar_list
         data = DataFrame(result_list)
         return data
 
     #
     #
     # 找到住院记录对应的静态数据项， 药物使用（10）+疾病诊断（25）+入院来源+年龄+性别+最终结果（存活，死亡）+BMI+入院评分=41个静态特征
-    def find_static_data(self, unitid, header):
+    def filter_static(self, unitid, header):
         cursor = self.connection.cursor()
         sql = "set search_path to " + self.search_path + ";"
         cursor.execute(sql)
@@ -352,19 +401,19 @@ class Querysql:
               " max(case when di.diagnosisstring like '%cancer%' then 1 else 0 end)                          as Cancer," \
               " max(case when di.diagnosisstring like '%cardiac arrest%' then 1 else 0 end)                  as Cardiac_Arrest," \
               " max(case when di.diagnosisstring like '%cardiogenic shock%' then 1 else 0 end)               as Cardiogenic_Shock," \
-              " max(case when di.diagnosisstring like '%cardiovascular%' then 1 else 0 end)                  as Cardiovascular_Medical," \
-              " max(case when di.diagnosisstring like '%pericardial%' then 1 else 0 end)                     as Cardiovascular_Other," \
+              " max(case when di.diagnosisstring like '%cardiovascular%' and  di.diagnosispriority like 'Other' then 1 else 0 end)                  as Cardiovascular_Medical," \
+              " max(case when di.diagnosisstring like '%pericardi%' then 1 else 0 end)                     as Cardiovascular_Other," \
               " max(case when di.diagnosisstring like '%stroke%' then 1 else 0 end)                          as Cerebrovascular_Accident_Stroke," \
-              " max(case when di.diagnosisstring like '%chest pain%' then 1 else 0 end)                      as Chest_Pain_Unknown_Origin," \
+              " max(case when di.diagnosisstring like '%chest pain%' and di.diagnosisstring not like '%cardiovascular%' then 1 else 0 end)                      as Chest_Pain_Unknown_Origin," \
               " max(case when di.diagnosisstring like '%coma%' then 1 else 0 end)                            as Coma," \
               " max(case when di.diagnosisstring like '%CABG%' then 1 else 0 end)                            as Coronary_Artery_Bypass_Graft," \
               " max(case when di.diagnosisstring like '%ketoacidosis%' then 1 else 0 end)                    as Diabetic_Ketoacidosis," \
               " max(case when di.diagnosisstring like '%bleeding%' then 1 else 0 end)                        as Gastrointestinal_Bleed," \
               " max(case when di.diagnosisstring like '%GI obstruction%' then 1 else 0 end)                  as Gastrointestinal_Obstruction," \
-              " max(case when di.diagnosisstring like '%neurologic%' then 1 else 0 end)                      as Neurologic," \
+              " max(case when di.diagnosisstring like '%neurologic%' and di.diagnosisstring not like '%stroke%' then 1 else 0 end)                      as Neurologic," \
               " max(case when di.diagnosisstring like '%overdose%' then 1 else 0 end)                        as Overdose," \
               " max(case when di.diagnosisstring like '%pneumonia%' then 1 else 0 end)                       as Pneumonia," \
-              " max(case when di.diagnosisstring like '%ARDS%' or di.diagnosisstring like '%acute respiratory failure%' then 1 else 0 end) as Respiratory_Medical_Other," \
+              " max(case when di.diagnosisstring like '%ARDS%' or di.diagnosisstring like '%respiratory distress%' and di.diagnosisstring not like '%edema%' then 1 else 0 end) as Respiratory_Medical_Other," \
               " max(case when di.diagnosisstring like '%sepsis%' then 1 else 0 end)                          as Sepsis," \
               " max(case when di.diagnosisstring like '%thoracotomy%' then 1 else 0 end)                     as Thoracotomy," \
               " max(case when di.diagnosisstring like '%trauma%' then 1 else 0 end)                          as Trauma," \
@@ -394,19 +443,26 @@ class Querysql:
               "      when hospitaladmitsource like 'Observation'     then 2" \
               "      when hospitaladmitsource like 'ICU' or hospitaladmitsource like 'Other ICU'    then 3" \
               "      when hospitaladmitsource ~* '[a-z]' then 4 else 5 end                     as admitsource," \
-              " case when age like '> 89' then 90 else cast(age as Numeric) end as age," \
+              " case when age like '> 89' then 90 " \
+              "      when age ~* '[0-9]'  then cast(age as Numeric) " \
+              "      else 91 end as age," \
               " case when gender like 'Female' then 0 else 1 end as gender ," \
               " case when admissionheight > 0 then round(admissionweight / pow(admissionheight / 100, 2),2)  else 0 end  as BMI," \
               " case" \
               "     when pa.hospitaldischargestatus like '%Alive%' and" \
-              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 1  then 1" \
+              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 <= 1  then 0" \
               "     when pa.hospitaldischargestatus like '%Alive%' and" \
-              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 < 1 then 0" \
+              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 1  then 1" \
               "     when pa.hospitaldischargestatus like '%Expired%' and" \
-              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 < 1 then 2" \
+              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 <= 1 " \
+              "          and pa.unittype like '%ICU%' then 2" \
               "     when pa.hospitaldischargestatus like '%Expired%' and" \
-              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 1  then 3" \
-              "     else 4 end as status" \
+              "          (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 1 " \
+              "     and  (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 <= 28 then 3" \
+              "     when pa.hospitaldischargestatus like '%Expired%'  " \
+              "     and  (pa.hospitaldischargeoffset - pa.hospitaladmitoffset) / 1440 > 28 " \
+              "     and  pa.unitdischargelocation ~* '[a-z]' then 4 " \
+              "     else 5 end as status" \
               " from patient as pa" \
               " where patientunitstayid = " + str(unitid)
         cursor.execute(sql)
@@ -450,10 +506,11 @@ class Querysql:
 
 
 # compute median，variances and change rate for all dynamic items
-def compute_dynamic_factor(data, header):
+def compute_dynamic(data, header):
     # add head to data
     data.columns = ['name', 'result', 'time']
     # 对于多名称特征数据进行更名
+    pao2_fio2 = []
     for index, row in data.iterrows():
         if "Carboxyhemoglobin" in row['name']:
             row['name'] = 'Hemoglobin'
@@ -463,9 +520,17 @@ def compute_dynamic_factor(data, header):
             row['name'] = 'bicarbonate'
         elif 'bedside glucose' in row['name']:
             row['name'] = 'glucose'
+        elif 'pao2' or 'FiO2' in row['name']:
+            pao2_fio2.append((data.iloc[index]['time'], data.iloc[index]['name'], data.iloc[index]['result']))
         # dataframe修改数据需要添加下面这句，否则修改不成功
         data.iloc[index] = row
     # 将处理后的数据进行排序，有利于后续中位数和方差的计算
+    # 计算p/f的值
+    p_f = pf_filter.compute_pf(pao2_fio2)
+    if not p_f is None:
+        p_f = DataFrame(p_f)
+        p_f.columns = ['name', 'result', 'time']
+        data = pd.concat([data, p_f], axis=0)
     data.sort_values(by='name', inplace=True, ascending=True)
     result_list = {}
     i = 0
@@ -473,13 +538,13 @@ def compute_dynamic_factor(data, header):
     while i < len(data):
         item_name = data.iloc[i, 0]
         item_list = []
-        item_list.append(data.iloc[i, 1])
+        item_list.append(Decimal(data.iloc[i, 1]))
         # 汇总每种变量的所有信息
         j = i + 1
         # 取出同一特征item_name的所有数据存储在列表item_list中
         while j < len(data):
             if data.iloc[j, 0] == item_name:
-                item_list.append(data.iloc[j, 1])
+                item_list.append(Decimal(data.iloc[j, 1]))
                 j += 1
             else:
                 break
