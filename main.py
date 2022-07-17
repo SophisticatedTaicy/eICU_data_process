@@ -7,6 +7,7 @@ import threading
 import time
 import datetime
 
+import numpy as np
 import psycopg2
 import pandas as pd
 from functools import reduce
@@ -15,13 +16,17 @@ from pandas import DataFrame
 from tqdm import tqdm
 
 import data_process
+import filter.param
 import query_sql
 
 # 数据处理流程：
 # 根据
 import init
 import pf_filter
-from filter.param import sum_list
+from filter.param import result_header
+
+
+# def concat(data, label):
 
 
 class MyThread(threading.Thread):
@@ -32,74 +37,118 @@ class MyThread(threading.Thread):
         self.is_first = True
 
     def run(self):
-        # print('%s区间数据在运行中-----------' % str(self.name))
-        for id in self.data:
+        print('%s区间数据在运行中-----------' % str(self.name))
+        for item in self.data:
             # 住院记录对应的220维数据信息抽取
-            header = init.init_dict(header=sum_list)
+            header = init.init_dict(header=result_header)
+            id = item[0]
+            identification = item[1]
+            severity = item[2]
+            enrollment = item[3]
+            header['id'] = id
+            header['severity'] = severity
             # 查询相关住院记录动态数据
+            # query = query_sql.Query()
+            # dynamic = query.filter_dynamic(id, identification, enrollment)
+            # query = query_sql.Query()
+            # # 查询相关住院记录静态数据
+            # query.filter_static(item, header)
             query = query_sql.Query()
-            dynamic = query.filter_dynamic(id)
-            query = query_sql.Query()
-            # 查询相关住院记录静态数据
-            query.filter_static(id, header)
+            status, detail = query.access_outcome(id, enrollment)
+            # print('id : ' + str(header['id']) + ' status : ' + str(status) + ' detail : ' + str(detail))
+            header['status'] = status
+            header['detail'] = detail
+            dataframe = DataFrame([header])
+            dataframe.to_csv('result/outcome.csv', mode='a', encoding='utf-8', header=False, index=False)
             # 计算动态数据的中位数、方差以及变化率
-            result_list = query_sql.compute_dynamic(dynamic, header)
-            # 最终住院记录数据转换为dataframe
-            data = DataFrame([result_list])
+            # result_dict = query_sql.compute_dynamic(dynamic, header)
+            # data = DataFrame([result_dict])
             # 数据追加写入文件
-            data.to_csv('result.csv', mode='a', header=False, index=False)
-            print(str(id) + '写入成功！')
+            # data.to_csv('result/feature_data.csv', mode='a', encoding='utf-8', header=False, index=False)
+            # print(str(item) + '写入成功！')
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    # 使用年龄，呼吸衰竭，非心血管衰竭，peep筛选数据
-    # peep = find_all_features.Querysql().filter_with_peep()
-    # age = find_all_features.Querysql().filter_with_age()
-    # respiratory = find_all_features.Querysql().filter_with_respiratory_failure()
-    # congestive = find_all_features.Querysql().filter_with_congestive_heart_failure()
-    #
-    # # 多个dataframe取交集
-    # dfs = [peep, age, respiratory, congestive]
-    # temp = reduce(lambda x, y: pd.merge(x, y, how='inner'), dfs)
-
-    # 根据p/f筛选
-
-    # print(temp)
-
-    # # 将最终数据排序
-    # temp.to_csv('temp.csv', encoding='utf-8')
-
-    # # 找到所有患者的pao2,fio2的值
-
-    # p_fs = find_all_features.filter_w
-    # ith_pao2_or_fio2(cursor)
-
-    # 最终结果数据展示表头
-    # find_all_features.combine_feature(cursor, 231498)
-    # 对氧合指数进行筛选,筛选后的所有id是result_id
-
+    # # 使用年龄，呼吸衰竭，非心血管衰竭，peep筛选数据
+    # # # 患者年龄不小于18且需要机械通气
+    # start = time.time()
+    # print('开始时间 ： ' + str(datetime.datetime.now()))
+    # query = query_sql.Query()
+    # # 200234
+    # age_id = query.filter_with_age()
+    # # 需要机械通气
+    # query = query_sql.Query()
+    # vent_support_id = query.filter_with_vent_support()
+    # # print(str(age_id))
+    # # # 患者患有呼吸衰竭且不为心血管衰竭
+    # query = query_sql.Query()
+    # respiratory_id = query.filter_with_respiratory_failure_without_congestive_heart_failure()
+    # # print(str(respiratory_id))
+    # # # 取满足前述条件的住院记录id
+    # ids = [age_id, vent_support_id, respiratory_id]
+    # temp = reduce(lambda x, y: pd.merge(x, y, how='inner'), ids)
+    # # 将dataframe中重复的内容去除以后转换为list
+    # result_list = temp[0].drop_duplicates().values.tolist()
+    # result_dataframe = DataFrame(result_list)
+    # result_dataframe.to_csv('result/respiratory_filter.csv', mode='w', encoding='utf-8', index=False)
+    # # print(str(result_list))
+    # print('after filter with age, respiratory failure and vent support : ' + str(len(result_list)))
+    # result = []
+    # result_list = np.array(pd.read_csv('result/respiratory_filter.csv'))
+    # # print(str(result_list[0][0]))
+    # for unitid in result_list:
+    #     query = query_sql.Query()
+    #     # print(str(unitid))
+    #     # 患者连续八小时peep不小于5且p/f不大于300
+    #     legal = query.filter_with_p_f(unitid[0])
+    #     if not legal is None:
+    #         result.append(legal)
+    # p_f = DataFrame(result)
+    # p_f.to_csv('result/p_f_filter.csv', mode='w', encoding='utf-8', index=False)
+    # print('after filter with  p/f  : ' + str(len(result)))
+    # result = np.array(pd.read_csv('result/p_f_filter.csv'))
+    # print('data type ' + str(result.shape))
+    # final = []
+    # for i in range(0, len(result)):
+    #     item = {}
+    #     item['id'] = result[i][1]
+    #     item['identification'] = result[i][2]
+    #     item['severity'] = result[i][0]
+    #     id = item['id']
+    #     identification = item['identification']
+    #     severity = item['severity']
+    #     # print('id: ' + str(id) + ' identification : ' + str(identification) + ' severity : ' + str(severity))
+    #     query = query_sql.Query()
+    #     peep_judge = query.filter_with_peep(id, identification)
+    #     if peep_judge:
+    #         item['enrollment'] = identification + 1440
+    #         final.append(item)
+    # print('after filter with peep  : ' + str(len(final)))
+    # peep = DataFrame(final)
+    # peep.to_csv('result/peep_filter.csv', mode='w', encoding='utf-8', index=False)
     # 多线程抽取数据
-    # 最终住院记录id提取
-    start = time.time()
-    print('开始时间 ： ' + str(datetime.datetime.now()))
-    # result = pd.read_csv('result_id.csv', sep=',')
-    result = pd.read_csv('result.csv', sep=',')
-    df = DataFrame(result)
-    df_list = []
+    # 最终住院记录id和确诊时间提取
+    # result: object = np.array(pd.read_csv('result/peep_filter.csv'))
+    # df_list = []
+    # # 数据分割
+    # for i in range(12):
+    #     df_list.append(result[i * 700:i * 700 + 700])
+    # df_list.append(result[8400:-1])
+    # for data in tqdm(df_list):
+    #     name = str(data[0][0]) + '-' + str(data[-1][0])
+    #     # 分线程运行
+    #     MyThread(name=name, data=data).start()
+    data = pd.read_csv('result/fill_with_average.csv', low_memory=False)[:, 0:-2]
+    print('data is : ' + str(data))
+    label = np.array(pd.read_csv('result/outcome.csv', low_memory=False))[:, 0, -1, -2]
+    print('label is : ' + str(label))
+    # MyThread(name='test', data=[[511762, 0, 2, 1440]]).start()
+    # Header = filter.param.result_header
+    # with open('result/feature_data.csv', mode='a', newline='') as csvfile:
+    #     writer = csv.DictWriter(csvfile, fieldnames=Header)
+    #     writer.writeheader()
 
-    # 数据分割
-    for i in range(15):
-        df_list.append(df['id'][i * 1000:i * 1000 + 1000])
-    df_list.append(df['id'][15000:-1])
-
-    for data in tqdm(df_list):
-        name = str(data.head(1).index.tolist()[0]) + '-' + str(data.tail(1).index.tolist()[0])
-        # 分线程运行
-        MyThread(name=name, data=data).start()
-    with open('result.csv', mode='a') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=sum_list)
-        writer.writeheader()
-    end = time.time()
-    total = (end - start) / 60
-    print('结束时间 ： ' + str(datetime.datetime.now()) + '程序运行花费了' + str(time.time() - start) + '秒')
+    # 注释前面所有行，打开这两行哟，谢谢
+    # result = pd.read_csv('result/feature_data.csv', low_memory=False)
+    # fill_invalid_data = query_sql.fill_invalid_data_with_average(result)

@@ -19,8 +19,8 @@ class MyThread(threading.Thread):
         for id in self.data:
             # print(str(id) + '住院记录p/f值计算中。。。。')
             # 用均值填充缺少的值
-            query = query_sql.Querysql()
-            data = query.filter_pf_by_id(id)
+            query = query_sql.Query()
+            data = query.filter_with_p_f(id)
             data = compute_pf(data)
             data = (id, data)
             dataframe = DataFrame(data)
@@ -127,84 +127,113 @@ def fill_with_pf(id):
 
 # 计算每次住院记录中的p/f的中位数，方差以及变化率
 def compute_pf(data):
-
     # time name value
-    median = 0
-    variance = 0
-    changerate = 0
+    data = sorted(data, key=lambda x: x[0])
     pao2_count = 0
     fio2_count = 0
     pao2 = 0
     fio2 = 0
     for item in data:
-        if item[1] == 'paO2' and not item[2] is None:
-            pao2_count = pao2_count + 1
-            pao2 = item[2] + pao2
-        if item[1] == 'FiO2' and not item[2] is None:
-            fio2_count = fio2_count + 1
-            fio2 = item[2] + fio2
+        name = item[1]
+        value = item[2]
+        # print('name : ' + str(name) + ' value : ' + value)
+        if 'paO2' in name and value > 1e-6:
+            pao2_count += 1
+            pao2 += value
+        if 'FiO2' in name and value > 1e-6:
+            fio2_count += 1
+            fio2 += value
     # 只有pao2或者只有fio2时，三项数值置0
     if pao2_count == 0 or fio2_count == 0:
+        print('只有一个检查项')
         return None
 
     # 计算均值
-    pao2 = round(pao2 / pao2_count, 2)
-    fio2 = round(fio2 / fio2_count, 2)
+    pao2_mean = pao2 / pao2_count
+    fio2_mean = fio2 / fio2_count
     # 用均值填充缺省值
-    for i in range(len(data)):
-        if data[i][1] == 'paO2' and (data[i][2] is None or data[i][2] == 0):
+    for i in range(0, len(data)):
+        if data[i][1] == 'paO2' and (data[i][2] is None or data[i][2] < 1e-6):
             data[i] = list(data[i])
-            data[i][2] = pao2
+            data[i][2] = pao2_mean
             data[i] = tuple(data[i])
-        if data[i][1] == 'FiO2' and (data[i][2] is None or data[i][2] == 0):
+        if data[i][1] == 'FiO2' and (data[i][2] is None or data[i][2] < 1e-6):
             data[i] = list(data[i])
-            data[i][2] = fio2
+            data[i][2] = fio2_mean
             data[i] = tuple(data[i])
-    p_f = []
     # 将空余位置的pao2或fio2值用后位置值替代
     i = 0
-    while i < len(data):
-        item_name = data[i][2]
-        j = i + 1
-        while j < len(data):
-            if data[j][1] != item_name:
-                if data[i][0] != data[j][0]:
-                    extra_item = data[j]
-                    extra_item = list(extra_item)
-                    extra_item[0] = data[i][0]
-                    extra_item = tuple(extra_item)
-                    data.insert(i + 1, extra_item)
-                i = i + 1
-                break
-            else:
-                j = j + 1
-        i = i + 1
-    i = i - 1
-    # # 最后剩下的pao2或fio2用前置位fio2或pao2填充
-    while i - 1 > 0 and data[i][2] == data[i - 1][2] or data[i][1] != data[i - 1][1]:
-        j = i - 1
-        while j > 0:
-            if data[j][2] != data[i][2]:
-                extra_item = data[j]
-                extra_item = list(extra_item)
-                extra_item[1] = data[i][1]
-                extra_item = tuple(extra_item)
-                data.insert(i + 1, extra_item)
-                i = i - 1
-            else:
-                j = j - 1
-        i = i - 1
+    while i < len(data) - 1:
+        # 当前项与下一项是同一时刻的pao2和fio2
+        if data[i][0] == data[i + 1][0] and data[i][1] != data[i + 1][1]:
+            i += 1
+        else:
+            item_name = data[i][1]
+            # 当前时刻pao2或fio2不存在时，使用对应前面项填充
+            j = i - 1
+            while j >= 0:
+                if data[j][1] != item_name:
+                    if data[i][0] != data[j][0]:
+                        extra_item = list(data[j])
+                        extra_item[0] = data[i][0]
+                        extra_item = tuple(extra_item)
+                        data.insert(i + 1, extra_item)
+                    i = i + 1
+                    break
+                else:
+                    j -= 1
+        i += 1
     i = 0
     # 计算所有p/f值
-    while i + 1 < len(data):
-        item_name = data[i][2]
-        if item_name == 'pao2':
-            if data[i + 1][2] > 0:
-                p_f.append(('P/F ratio', round(data[i][2] / data[i + 1][2], 3), data[i][0]))
+    pao2_list = []
+    fio2_list = []
+    p_f = []
+    while i < len(data) - 1:
+        item_name = data[i][1]
+        item_time = data[i][0]
+        item_result = data[i][2]
+        next_name = data[i + 1][1]
+        next_time = data[i + 1][0]
+        if item_name != next_name and item_time == next_time:
+            if item_name == 'paO2':
+                pao2 = data[i][2]
+                pao2_list.append(('paO2', pao2, item_time))
+                fio2 = data[i + 1][2]
+                if fio2 > 1:
+                    fio2 /= 100
+                elif fio2 < 1e-6:
+                    if fio2_mean > 1:
+                        fio2_mean /= 100
+                    fio2 = fio2_mean
+                fio2_list.append(('FiO2', fio2, next_time))
+                p_f.append(('P/F ratio', pao2 / fio2))
+            else:
+                fio2 = data[i][2]
+                if fio2 > 1:
+                    fio2 /= 100
+                elif fio2 < 1e-6:
+                    if fio2_mean > 1:
+                        fio2_mean /= 100
+                    fio2 = fio2_mean
+                fio2_list.append(('FiO2', fio2, item_time))
+                pao2 = data[i + 1][2]
+                pao2_list.append(('paO2', pao2, next_time))
+                p_f.append(('P/F ratio', pao2 / fio2))
+            i += 2
         else:
-            if data[i][2] > 0:
-                p_f.append(('P/F ratio', round(data[i + 1][2] / data[i][2], 3), data[i][0]))
-        i = i + 2
+            if item_name == 'paO2':
+                pao2 = data[i][2]
+                pao2_list.append(('paO2', pao2, item_time))
+            else:
+                fio2 = data[i][2]
+                if fio2 > 1:
+                    fio2 /= 100
+                if fio2 < 1e-6:
+                    if fio2_mean > 1:
+                        fio2_mean /= 100
+                        fio2 = fio2_mean
+                fio2_list.append(('FiO2', fio2, item_time))
+            i += 1
     # 将数值排序
     p_f.sort()
     return p_f
@@ -213,7 +242,7 @@ def compute_pf(data):
 if __name__ == '__main__':
 
     df_list = []
-    result = pd.read_csv('result_id.csv', sep=',')
+    result = pd.read_csv('data/result_id.csv', sep=',')
     df = DataFrame(result)
     df_list = []
 
