@@ -175,7 +175,7 @@ def GBDT_Regressor_demo(data, label):
 
 
 def GBDT_Classifier_demo(data, label):
-    x_train, x_test, y_train, y_test = train_test_split(data, label, test_size=0.3)
+    x_train, x_test, y_train, y_test = train_test_split(data, label, test_size=0.2)
 
     filter.param.classify_model.fit(x_train, y_train)
 

@@ -9,9 +9,11 @@ import filter.param
 
 if __name__ == '__main__':
     # 获取数据集及标签,打乱数据(标签有序或过于集中会导致交叉验证时,只有一种样本,导致roc的area为nan)
-    dataframe = shuffle(pd.read_csv('data/result.csv', encoding='utf-8'))
-    ards = np.array(dataframe.iloc[:, 1:-1])
-    label = np.array(dataframe.iloc[:, -1])
+    dataframe = shuffle(pd.read_csv('data/new_result.csv', encoding='utf-8'))
+    ards = np.array(dataframe.iloc[:, 1:-3])
+    # print('ards is : ' + str(ards) + ' type is : ' + str(type(ards)))
+    label = np.array(dataframe.iloc[:, -3])
+    # print('label is : ' + str(label))
     label_new = []
     # 数据类型转换
     for item in label:

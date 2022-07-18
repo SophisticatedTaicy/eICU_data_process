@@ -26,7 +26,25 @@ import pf_filter
 from filter.param import result_header
 
 
-# def concat(data, label):
+def concat(data, label):
+    origin_ids = data['id']
+    modify_ids = label['id']
+    print('id is : ' + str(label['id']))
+    statuses = label['status']
+    details = label['detail']
+    new_status = []
+    new_detail = []
+    for origin_id in origin_ids:
+        for modify_id, status, detail in zip(modify_ids, statuses, details):
+            if origin_id == modify_id:
+                new_status.append(status)
+                new_detail.append(detail)
+    data.drop(columns='status', inplace=True)
+    data['status'] = new_status
+    data['detail'] = new_detail
+    dataframe = DataFrame(data)
+    dataframe.to_csv('data/new_result.csv', mode='w', encoding='utf-8', index=False)
+    print('done! :')
 
 
 class MyThread(threading.Thread):
@@ -54,11 +72,15 @@ class MyThread(threading.Thread):
             # # 查询相关住院记录静态数据
             # query.filter_static(item, header)
             query = query_sql.Query()
-            status, detail = query.access_outcome(id, enrollment)
+            status, detail, unitstay, hospitalstay = query.access_outcome(id, enrollment)
+            outcome_dict = {}
+            outcome_dict['id'] = id
             # print('id : ' + str(header['id']) + ' status : ' + str(status) + ' detail : ' + str(detail))
-            header['status'] = status
-            header['detail'] = detail
-            dataframe = DataFrame([header])
+            outcome_dict['status'] = status
+            outcome_dict['detail'] = detail
+            outcome_dict['unit'] = unitstay
+            outcome_dict['hospital'] = hospitalstay
+            dataframe = DataFrame([outcome_dict])
             dataframe.to_csv('result/outcome.csv', mode='a', encoding='utf-8', header=False, index=False)
             # 计算动态数据的中位数、方差以及变化率
             # result_dict = query_sql.compute_dynamic(dynamic, header)
@@ -129,26 +151,24 @@ if __name__ == '__main__':
     # peep.to_csv('result/peep_filter.csv', mode='w', encoding='utf-8', index=False)
     # 多线程抽取数据
     # 最终住院记录id和确诊时间提取
-    # result: object = np.array(pd.read_csv('result/peep_filter.csv'))
-    # df_list = []
-    # # 数据分割
-    # for i in range(12):
-    #     df_list.append(result[i * 700:i * 700 + 700])
-    # df_list.append(result[8400:-1])
-    # for data in tqdm(df_list):
-    #     name = str(data[0][0]) + '-' + str(data[-1][0])
-    #     # 分线程运行
-    #     MyThread(name=name, data=data).start()
-    data = pd.read_csv('result/fill_with_average.csv', low_memory=False)[:, 0:-2]
-    print('data is : ' + str(data))
-    label = np.array(pd.read_csv('result/outcome.csv', low_memory=False))[:, 0, -1, -2]
-    print('label is : ' + str(label))
+    result: object = np.array(pd.read_csv('result/peep_filter.csv'))
+    df_list = []
+    # 数据分割
+    for i in range(12):
+        df_list.append(result[i * 700:i * 700 + 700])
+    df_list.append(result[8400:-1])
+    for data in tqdm(df_list):
+        name = str(data[0][0]) + '-' + str(data[-1][0])
+        # 分线程运行
+        MyThread(name=name, data=data).start()
+    # data = pd.read_csv('result/fill_with_average.csv', low_memory=False)
+    # label = pd.read_csv('result/outcome.csv', low_memory=False)
+    # concat(data, label)
     # MyThread(name='test', data=[[511762, 0, 2, 1440]]).start()
     # Header = filter.param.result_header
     # with open('result/feature_data.csv', mode='a', newline='') as csvfile:
     #     writer = csv.DictWriter(csvfile, fieldnames=Header)
     #     writer.writeheader()
 
-    # 注释前面所有行，打开这两行哟，谢谢
     # result = pd.read_csv('result/feature_data.csv', low_memory=False)
     # fill_invalid_data = query_sql.fill_invalid_data_with_average(result)

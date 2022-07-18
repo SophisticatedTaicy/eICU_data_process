@@ -97,9 +97,9 @@ params = {'n_estimators': 10,  # 弱分类器的个数
           'learning_rate': 0.0000000001}
 
 reg_model = GradientBoostingRegressor(
-    loss="ls",
+    loss="squared_error",
     learning_rate=0.18,
-    n_estimators=200,
+    n_estimators=100,
     subsample=0.8,
     max_features=0.8,
     max_depth=3,
@@ -115,3 +115,7 @@ classify_model = GradientBoostingClassifier(
     max_depth=3,
     verbose=2
 )
+
+
+
+

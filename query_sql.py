@@ -543,7 +543,7 @@ class Query:
               " from lab" \
               " where patientunitstayid = " + str(id) + \
               " and labname in( 'paO2', 'FiO2')" \
-              " and labresultoffset>" + str(enrollment) + \
+              " and labresultoffset>=" + str(enrollment + 1440) + \
               " order by time asc"
         cursor.execute(sql)
         pa_fi = cursor.fetchall()
@@ -576,14 +576,21 @@ class Query:
             unitdischargeoffset = int(patient[0][6])
             hospitaldischargeoffset = int(patient[0][7])
             # 先判断患者快速恢复，长期住院，快速死亡和其他状态
-            # print('Expired' in unitdischargestatus)
-            # 快速恢复
-            if unitdischargestatus == 'Expired' and unitdischargeoffset <= enrollment + 1440:
-                outcome = 2
-            elif hospitaldischargestatus == 'Expired' and hospitaldischargeoffset <= enrollment + 1440:
-                outcome = 2
-            elif unitdischargestatus != 'Expired' and hospitaldischargestatus != 'Expired' and hospitaldischargeoffset < enrollment + 1440:
-                outcome = 0
+            # 快速死亡
+            if flag == False:
+                if unitdischargestatus == 'Expired' and unitdischargeoffset <= enrollment + 1440:
+                    outcome = 2
+                # 快速死亡
+                elif hospitaldischargestatus == 'Expired' and hospitaldischargeoffset <= enrollment + 1440:
+                    outcome = 2
+                # 快速恢复
+                elif unitdischargestatus != 'Expired' and unitdischargeoffset <= enrollment + 1440:
+                    outcome = 0
+                # 长期住院
+                elif hospitaldischargestatus != 'Expired' and hospitaldischargeoffset <= enrollment + 1440:
+                    outcome = 0
+                else:
+                    outcome = 1
             else:
                 outcome = 1
             # 再判断患者详细状态
@@ -616,8 +623,11 @@ class Query:
                 detail = 1
             elif 'Home' not in detail_outcome and 'not less than 28 days' in detail_outcome:
                 detail = 2
-                print('id : ' + str(id) + ' status : ' + str(outcome) + ' detail : ' + str(detail_outcome))
-        return outcome, detail
+            elif 'Home' in detail_outcome and 'not less than 28 days' in detail_outcome:
+                # 家中28天以后死亡
+                detail = 3
+                # print('id : ' + str(id) + ' status : ' + str(outcome) + ' detail : ' + str(detail_outcome))
+        return outcome, detail, unitstay, hospitalstay
 
 
 def access_ards(pa_fi):
@@ -631,10 +641,8 @@ def access_ards(pa_fi):
     fi_mean = 0
     pa = 0
     fi = 0
-    # print('pa_fi : ' + str(pa_fi))
     # 若采集项为空或者数据采集时间小于八小时, 则不计算p / f
     if not pa_fi:
-        # print('采集项为空')
         return False, -1, -1
     for item in pa_fi:
         # time,name,value
@@ -665,7 +673,6 @@ def access_ards(pa_fi):
             extra_item = tuple(extra_item)
             del pa_fi[i]
             pa_fi.insert(i, extra_item)
-    # print('before : ' + str(pa_fi))
     # 2.若当前时间点的值不存在,需要找到对应的前面一个时间点的数据来填充当前值
     i = 0
     while i < len(pa_fi) - 1:
@@ -687,7 +694,6 @@ def access_ards(pa_fi):
                 else:
                     j -= 1
         i += 1
-    # print('after : ' + str(pa_fi))
     # 3.去除无法填充的数据项
     i = 0
     while i < len(pa_fi) - 1:
@@ -695,7 +701,6 @@ def access_ards(pa_fi):
             del pa_fi[i]
         else:
             break
-    # print('处理好的pao2和fio2数列 : ' + str(pa_fi))
     # 4.计算患者identification时间以及pao2, fio2, p / f的中位数, 方差以及变化率
     pao2_list = []
     fio2_list = []
@@ -725,7 +730,6 @@ def access_ards(pa_fi):
         pao2_list.append(pao2)
         i += 2
 
-    # print('p_f : ' + str(p_f) + ' pao2 : ' + str(pao2_list) + ' fio2 : ' + str(fio2_list))
     i = 0
     p_f_identification = 0
     if len(p_f) == 1 and p_f[0][1] <= 300:
