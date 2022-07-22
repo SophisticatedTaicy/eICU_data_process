@@ -204,15 +204,15 @@ def death_plot(death):
 
 if __name__ == '__main__':
     start = time.time()
-    result = pd.read_csv('data/new_result.csv')
+    result = pd.read_csv('result/fill_with_average.csv')
     # outcome_list = []
     # severities = result['severity']
-    details = pd.read_csv('result/outcome.csv')['detail']
+    details = np.array(result['detail'])
     ages = np.array(result['age'])
     # age_plot(ages)
     apache = np.array(result['admission_score'])
     # apacheIV_plot(apache)
-    unit = np.array(pd.read_csv('result/outcome.csv')['unit'])
-    hospital = np.array(pd.read_csv('result/outcome.csv')['hospital'])
+    unit = np.array(result['unit'])
+    hospital = np.array(result['hospital'])
     # stay_boxplot(unit, hospital)
-    death_plot(details)
+    # death_plot(details)

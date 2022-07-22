@@ -200,9 +200,8 @@ class Query:
         sql = "set search_path to " + self.search_path + ";"
         cursor.execute(sql)
         # 当使用age>='18'时年龄为2，。。，9或者None时会被误选中,需要二次筛选
-        sql = "  select patientunitstayid, case when age like '> 89' then 90 when age ~* '[0-9]' then cast(age as Numeric) end as age" \
-              "  from patient as pa" \
-              "  where pa.age >= '18';"
+        sql = "  select patientunitstayid, case when age like '> 89' then 90 when age ~* '[0-9]' and cast(age as Numeric)>=18 then cast(age as Numeric) end as age" \
+              "  from patient as pa;"
         cursor.execute(sql)
         list = cursor.fetchall()
         # id,age
@@ -404,82 +403,94 @@ class Query:
         cursor = self.connection.cursor()
         sql = "set search_path to " + self.search_path + ";"
         cursor.execute(sql)
-        header['id'] = unitid
-
-        sql = " select max(case when me.drugname like 'WARFARIN%' then 1 else 0 end) as warfarin" \
-              " from medication as me" \
-              " where drugstartoffset >= " + str(identification) + \
-              "   and drugstartoffset < " + str(enrollment) + \
-              "   and patientunitstayid = " + str(unitid)
-        cursor.execute(sql)
-        warfarin = cursor.fetchone()
-        if not warfarin is None:
-            if not warfarin[0] is None:
-                header['warfarin'] = warfarin[0]
 
         sql = " select " \
-              " max(case when infu.drugname like 'Dobutamine%' then 1 else 0 end)     as dobutamine," \
-              " max(case when infu.drugname like 'Dopamine%' then 1 else 0 end)       as Dopamine," \
-              " max(case when infu.drugname like 'epinephrine%' then 1 else 0 end)    as epinephrine," \
-              " max(case when infu.drugname like 'Heparin%' then 1 else 0 end)        as Heparin," \
-              " max(case when infu.drugname like 'Milrinone%' then 1 else 0 end)      as Milrinone," \
-              " max(case when infu.drugname like 'Norepinephrine%' then 1 else 0 end) as Norepinephrine," \
-              " max(case when infu.drugname like 'Phenylephrine%' then 1 else 0 end)  as phenylephrine," \
-              " max(case when infu.drugname like 'Vasopressin%' then 1 else 0 end)    as vasopressin" \
-              " from infusiondrug as infu" \
-              " where infusionoffset >= " + str(identification) + \
-              "   and infusionoffset < " + str(enrollment) + \
-              "  and patientunitstayid = " + str(unitid)
+              " max(case when addrug.drugname like '%WARFARIN SODIUM%' then 1 else 0 end)     as warfarin," \
+              " max(case when addrug.drugname like 'DOBUTAMINE HCL%' then 1 else 0 end)     as dobutamine," \
+              " max(case when addrug.drugname like 'DOPAMINE HCL%'  then 1 else 0 end)       as Dopamine," \
+              " max(case when addrug.drugname like 'EPINEPHRINE%' then 1 else 0 end)    as epinephrine," \
+              " max(case when addrug.drugname like 'HEPARIN%'  then 1 else 0 end)        as Heparin," \
+              " max(case when addrug.drugname like 'MILRINONE%' then 1 else 0 end)      as Milrinone," \
+              " max(case when addrug.drugname like 'NOREPINEPHRINE%' then 1 else 0 end) as Norepinephrine," \
+              " max(case when addrug.drugname like '%PHENYLEPHRINE%' then 1 else 0 end)  as phenylephrine" \
+              " from admissiondrug as addrug" \
+              " where patientunitstayid = " + str(unitid) + \
+              " and drugenteredoffset >= " + str(identification) + \
+              " and drugenteredoffset < " + str(enrollment)
         cursor.execute(sql)
-        medicine_list = cursor.fetchone()
-        if not medicine_list is None:
-            list = ['dobutamine', 'Dopamine', 'epinephrine', 'Heparin', 'Milrinone', 'Norepinephrine', 'phenylephrine',
-                    'vasopressin']
-            for i in range(len(medicine_list)):
-                if not medicine_list[i] is None:
-                    header[list[i]] = medicine_list[i]
-
-        sql = " select max(case when tr.treatmentstring like '%vasopressor%' then 1 else 0 end) as Vasopressor" \
-              " from treatment as tr" \
-              " where treatmentoffset >= " + str(identification) + \
-              "   and treatmentoffset < " + str(enrollment) + \
-              "   and patientunitstayid = " + str(unitid)
+        admissiondrug_list = cursor.fetchone()
+        sql = " select " \
+              " max(case when drugname like 'warfarin' then 1 else 0 end)     as warfarin," \
+              " max(case when drugname like 'DOPamine' then 1 else 0 end)       as Dopamine," \
+              " max(case when drugname like 'EPINEPHrine' then 1 else 0 end)    as epinephrine," \
+              " max(case when lower(drugname) like 'heparin%' then 1 else 0 end)        as Heparin," \
+              " max(case when lower(drugname) like '%norepinephrine%' then 1 else 0 end) as Norepinephrine," \
+              " max(case when lower(drugname) like '%phenylephrine%' then 1 else 0 end)  as phenylephrine," \
+              " max(case when me.drugname like 'VASOPRESSIN%' then 1 else 0 end) as vasopressin" \
+              " from medication as me" \
+              " where patientunitstayid = " + str(unitid) + \
+              " and drugstartoffset>=" + str(identification) + \
+              " and drugstopoffset< " + str(enrollment)
         cursor.execute(sql)
-        Vasopressor = cursor.fetchone()
-        if not Vasopressor is None:
-            if not Vasopressor[0] is None:
-                header['Vasopressor'] = Vasopressor[0]
+        medication_list = cursor.fetchone()
+        admissiondrug = ['warfarin', 'dobutamine', 'Dopamine', 'epinephrine', 'Heparin', 'Milrinone', 'Norepinephrine',
+                         'phenylephrine']
+        medication = ['warfarin', 'Dopamine', 'epinephrine', 'Heparin', 'Norepinephrine', 'phenylephrine',
+                      'vasopressin']
+        if not admissiondrug_list is None:
+            for i in range(len(admissiondrug)):
+                if not admissiondrug_list[i] is None:
+                    header[admissiondrug[i]] = admissiondrug_list[i]
+        if not medication_list is None:
+            for i in range(len(medication)):
+                if not medication_list[i] is None:
+                    if medication_list[i] > header[medication[i]]:
+                        print('before is : ' + str(header[medication[i]]))
+                        header[medication[i]] = medication_list[i]
+                        print('after is : ' + str(header[medication[i]]))
 
-        sql = " select max(case when di.diagnosisstring like '%acute coronary syndrome%' then 1 else 0 end)  as Acute_Coronary_Syndrome_diagnosis," \
-              " max(case when di.diagnosisstring like '%acute myocardial infarction%' then 1 else 0 end)     as Acute_Myocardial_Infarction," \
-              " max(case when di.diagnosisstring like '%acute renal failure%' then 1 else 0 end)             as Acute_Renal_Failure," \
-              " max(case when di.diagnosisstring like '%arrhythmia%' then 1 else 0 end)                      as Arrhythmia," \
-              " max(case when di.diagnosisstring like '%asthma%' then 1 else 0 end)                          as Asthma_Emphysema," \
-              " max(case when di.diagnosisstring like '%cancer%' then 1 else 0 end)                          as Cancer," \
-              " max(case when di.diagnosisstring like '%cardiac arrest%' then 1 else 0 end)                  as Cardiac_Arrest," \
-              " max(case when di.diagnosisstring like '%cardiogenic shock%' then 1 else 0 end)               as Cardiogenic_Shock," \
-              " max(case when di.diagnosisstring like '%cardiovascular%' and  di.diagnosispriority like 'Other' then 1 else 0 end)                  as Cardiovascular_Medical," \
-              " max(case when di.diagnosisstring like '%pericardi%' then 1 else 0 end)                     as Cardiovascular_Other," \
-              " max(case when di.diagnosisstring like '%stroke%' then 1 else 0 end)                          as Cerebrovascular_Accident_Stroke," \
-              " max(case when di.diagnosisstring like '%chest pain%' and di.diagnosisstring not like '%cardiovascular%' then 1 else 0 end)                      as Chest_Pain_Unknown_Origin," \
-              " max(case when di.diagnosisstring like '%coma%' then 1 else 0 end)                            as Coma," \
-              " max(case when di.diagnosisstring like '%CABG%' then 1 else 0 end)                            as Coronary_Artery_Bypass_Graft," \
-              " max(case when di.diagnosisstring like '%ketoacidosis%' then 1 else 0 end)                    as Diabetic_Ketoacidosis," \
-              " max(case when di.diagnosisstring like '%bleeding%' then 1 else 0 end)                        as Gastrointestinal_Bleed," \
-              " max(case when di.diagnosisstring like '%GI obstruction%' then 1 else 0 end)                  as Gastrointestinal_Obstruction," \
-              " max(case when di.diagnosisstring like '%neurologic%' and di.diagnosisstring not like '%stroke%' then 1 else 0 end)                      as Neurologic," \
-              " max(case when di.diagnosisstring like '%overdose%' then 1 else 0 end)                        as Overdose," \
-              " max(case when di.diagnosisstring like '%pneumonia%' then 1 else 0 end)                       as Pneumonia," \
-              " max(case when di.diagnosisstring like '%ARDS%' or di.diagnosisstring like '%respiratory distress%' and di.diagnosisstring not like '%edema%' then 1 else 0 end) as Respiratory_Medical_Other," \
-              " max(case when di.diagnosisstring like '%sepsis%' then 1 else 0 end)                          as Sepsis," \
-              " max(case when di.diagnosisstring like '%thoracotomy%' then 1 else 0 end)                     as Thoracotomy," \
-              " max(case when di.diagnosisstring like '%trauma%' then 1 else 0 end)                          as Trauma," \
-              " max(case when di.diagnosisstring like '%valve%' then 1 else 0 end)                           as Valve_Disease," \
-              " max(case when di.diagnosisstring like '%other infections%' then 1 else 0 end)                as others_diease   " \
-              " from diagnosis as di" \
-              " where  diagnosisoffset >= " + str(identification) + \
-              "    and diagnosisoffset < " + str(enrollment) + \
-              "    and patientunitstayid = " + str(unitid)
+        sql = " select max(case when treatmentstring like '%vasopressor%' then 1 else 0 end) as Vasopressor " \
+              " from treatment" \
+              " where patientunitstayid = " + str(unitid) + \
+              " and treatmentoffset >=" + str(identification) + \
+              " and treatmentoffset<" + str(enrollment)
+        cursor.execute(sql)
+        Vasopressor_list = cursor.fetchone()
+        if not Vasopressor_list is None and not Vasopressor_list[0] is None:
+            header['Vasopressor'] = Vasopressor_list[0]
+        else:
+            header['Vasopressor'] = 0
+
+        sql = " select " \
+              " max(case when apacheadmissiondx like '%Angina, unstable%' then 1 else 0 end)  as Acute_Coronary_Syndrome_diagnosis," \
+              " max(case when apacheadmissiondx like '%MI%' then 1 else 0 end)     as Acute_Myocardial_Infarction," \
+              " max(case when apacheadmissiondx like '%Renal %'  then 1 else 0 end)             as Acute_Renal_Failure," \
+              " max(case when apacheadmissiondx like '%Rhythm%' then 1 else 0 end)                      as Arrhythmia," \
+              " max(case when apacheadmissiondx like '%Asthma%' or apacheadmissiondx like '%Emphysema%' then 1 else 0 end)                          as Asthma_Emphysema," \
+              " max(case when apacheadmissiondx like '%Cancer%' or apacheadmissiondx like '%Leukemia,%' then 1 else 0 end)                          as Cancer," \
+              " max(case when apacheadmissiondx like '%Cardiac arrest%' then 1 else 0 end)                  as Cardiac_Arrest," \
+              " max(case when apacheadmissiondx like '%Shock, cardiogenic%' then 1 else 0 end)               as Cardiogenic_Shock," \
+              " max(case when apacheadmissiondx like '%Cardiovascular medical%'  then 1 else 0 end)                  as Cardiovascular_Medical," \
+              " max(case when apacheadmissiondx like '%Angina, stable%' or apacheadmissiondx like '%Pericardi%'  then 1 else 0 end)                     as Cardiovascular_Other," \
+              " max(case when apacheadmissiondx like '%cerebrovascular%' or apacheadmissiondx like '%Hemorrhage/%' then 1 else 0 end)       as Cerebrovascular_Accident_Stroke," \
+              " max(case when apacheadmissiondx like '%Chest pain,%'   then 1 else 0 end)                      as Chest_Pain_Unknown_Origin," \
+              " max(case when apacheadmissiondx like '%Coma/change%' or apacheadmissiondx like '%Nontraumatic coma%' then 1 else 0 end)      as Coma," \
+              " max(case when apacheadmissiondx like '%CABG%' then 1 else 0 end)                            as Coronary_Artery_Bypass_Graft," \
+              " max(case when apacheadmissiondx like '%Diabetic%' then 1 else 0 end)                    as Diabetic_Ketoacidosis," \
+              " max(case when apacheadmissiondx like '%Bleeding%' or apacheadmissiondx like '%GI perforation/%' then 1 else 0 end)           as Gastrointestinal_Bleed," \
+              " max(case when apacheadmissiondx like '%GI obstruction%' then 1 else 0 end)                  as Gastrointestinal_Obstruction," \
+              " max(case when apacheadmissiondx like '%,neurologic%' or apacheadmissiondx like '%Neoplasm%' or apacheadmissiondx like '%Seizures%' or apacheadmissiondx like 'Neuro%' then 1 else 0 end)         as Neurologic," \
+              " max(case when apacheadmissiondx like '%Overdose,%' or apacheadmissiondx like '%Toxicity, drug%' then 1 else 0 end)                        as Overdose," \
+              " max(case when apacheadmissiondx like '%Pneumonia,%' then 1 else 0 end)                       as Pneumonia," \
+              " max(case when apacheadmissiondx like '%Apnea%' or apacheadmissiondx like '%respiratory distress%' or apacheadmissiondx like '%edema%' or apacheadmissiondx like '%pulmonary”%'  then 1 else 0 end) as Respiratory_Medical_Other," \
+              " max(case when apacheadmissiondx like '%Sepsis,%' then 1 else 0 end)                          as Sepsis," \
+              " max(case when apacheadmissiondx like '%Thoracotomy%' then 1 else 0 end)                     as Thoracotomy," \
+              " max(case when apacheadmissiondx like '%trauma%' then 1 else 0 end)                          as Trauma," \
+              " max(case when apacheadmissiondx like '%valve%'  and apacheadmissiondx not like '%CABG%' then 1 else 0 end)     as Valve_Disease," \
+              " max(case when apacheadmissiondx like '%, other' then 1 else 0 end)                as others_diease   " \
+              " from patient as di" \
+              " where  patientunitstayid = " + str(unitid)
+
         cursor.execute(sql)
         diagnosis_list = cursor.fetchone()
         if not diagnosis_list is None:
@@ -499,24 +510,36 @@ class Query:
               "      when hospitaladmitsource like 'Operating Room'    then 1" \
               "      when hospitaladmitsource like 'Floor'     then 2" \
               "      when hospitaladmitsource like 'Direct Admit'    then 3" \
-              "      when hospitaladmitsource ~* '[a-z]' then 4  end                     as admitsource," \
+              "      when hospitaladmitsource ~* '[a-z]' then 4  end      as admitsource," \
               " case when age like '> 89' then 90 " \
               "      when age ~* '[0-9]'  then cast(age as Numeric) " \
               "      else 91 end as age," \
-              " case when gender like 'Female' then 0 else 1 end as gender ," \
-              " case when admissionheight > 0 then round(admissionweight / pow(admissionheight / 100, 2),2)  else 0 end  as BMI" \
+              " case when gender like 'Female' then 0 else 1 end as gender," \
+              " admissionweight,  " \
+              " admissionheight" \
               " from patient as pa" \
-              " where patientunitstayid = " + str(unitid)
+              " where patientunitstayid = " + str(unitid) + \
+              " and age >='18';"
         cursor.execute(sql)
         base_list = cursor.fetchone()
         # admitsource,age,gender,BMI,chargestatus,stay_day,leave_time,discharge_location
         if not base_list is None:
-            list = ['admitsource', 'age', 'gender', 'BMI']
+            list = ['admitsource', 'age', 'gender']
             for i in range(0, len(list)):
                 if not base_list[i] is None:
                     header[list[i]] = base_list[i]
-
-        sql = " select apachescore as admission_score" \
+        for i in range(0, len(base_list)):
+            if base_list[3] is None or base_list[3] < 10 or (base_list[4] is None or base_list[4] < 1):
+                header['BMI'] = 0
+            # 身高转换
+            else:
+                if base_list[4] > 1 and base_list[4] < 2.5:
+                    header['BMI'] = round(base_list[3] / pow(base_list[4], 2), 2)
+                if base_list[4] >= 100:
+                    header['BMI'] = round(base_list[3] / pow(base_list[4] / 100, 2), 2)
+                else:
+                    header['BMI'] = 0
+        sql = " select case when apachescore>0 then apachescore else 0 end as admission_score" \
               " from apachepatientresult as aps" \
               " where patientunitstayid = " + str(unitid)
         cursor.execute(sql)
@@ -626,7 +649,6 @@ class Query:
             elif 'Home' in detail_outcome and 'not less than 28 days' in detail_outcome:
                 # 家中28天以后死亡
                 detail = 3
-                # print('id : ' + str(id) + ' status : ' + str(outcome) + ' detail : ' + str(detail_outcome))
         return outcome, detail, unitstay, hospitalstay
 
 
@@ -657,7 +679,6 @@ def access_ards(pa_fi):
     # 若只有一种采集项,则不计算p/f
     if pa == 0 or fi == 0:
         return False, -1, -1
-
     pa_mean = pa_mean / pa
     fi_mean = fi_mean / fi
     # pao2和fio2数值列表规格化
@@ -931,29 +952,34 @@ def compute_dynamic(data, header):
 
 
 def fill_invalid_data_with_average(data):
-    data = np.array(data)[:, 0:-1]
+    data = np.array(data)
     print('shape is : ' + str(data.shape))
     sum = 0
     non_zero_sum = 0
-    # apache非法值使用均值填充
-    for i in range(0, 8388):
-        # 计算当前列非零数值的均值
-        item = float(data[i][42])
-        # 计算非0和非-项的总和与数量
-        if item >= 1:
-            sum += item
-            non_zero_sum += 1
-    if non_zero_sum > 0:
-        average = round(sum / non_zero_sum, 3)
-        # 使用均值填充不存在的数值项
-        for i in range(0, 8388):
-            item = float(data[i][42])
-            if item < 1:
-                data[i][42] = average
-    for j in range(43, 203):
+    # BMI以及apache非法值使用均值填充
+    # print(str(data[0:8389, 41]))
+    for j in range(40, 42):
+        # BMI小于10为异常值
+        for i in range(0, 8389):
+            # print('i is : ' + str(i) + ' j is : ' + str(j) + ' item is : ' + str(data[i][j]))
+            # 计算当前列非零数值的均值
+            item = float(data[i][j])
+
+            # 计算非0和非-项的总和与数量
+            if item > 10:
+                sum += item
+                non_zero_sum += 1
+        if non_zero_sum > 0:
+            average = round(sum / non_zero_sum, 3)
+            # 使用均值填充不存在的数值项
+            for i in range(0, 8389):
+                item = float(data[i][j])
+                if item <= 10:
+                    data[i][j] = average
+    for j in range(42, 201):
         sum = 0
         non_zero_sum = 0
-        for i in range(0, 8381):
+        for i in range(0, 8389):
             # 计算当前列非零数值的均值
             item = data[i][j]
             # 计算非0和非-项的总和与数量
@@ -963,12 +989,23 @@ def fill_invalid_data_with_average(data):
         if non_zero_sum > 0:
             average = round(sum / non_zero_sum, 3)
             # 使用均值填充不存在的数值项
-            for i in range(0, 8382):
+            for i in range(0, 8389):
                 item = data[i][j]
                 if item == '-':
                     data[i][j] = average
-        if item == '-':
-            data[i][j] = 0
     data = DataFrame(data)
-    data.to_csv('result/fill_with_average.csv', mode='w', encoding='utf-8', header=result_header[:-1], index=False)
+    print(str(data))
+    data.to_csv('result/fill_with_average.csv', mode='w', encoding='utf-8', header=result_header, index=False)
     print('均值补充完全')
+
+
+def fill__with_0(data):
+    data = np.array(data)
+    for j in range(41, 200):
+        for i in range(0, 8389):
+            item = data[i][j]
+            if item == '-':
+                data[i][j] = 0
+    data = DataFrame(data)
+    data.to_csv('result/fill_with_0.csv', mode='w', encoding='utf-8', header=result_header, index=False)
+    print('done!')

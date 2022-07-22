@@ -1,20 +1,20 @@
 from matplotlib import pyplot as plt
 from numpy import interp
-from sklearn.utils import shuffle
-
-import filter.param
+from sklearn.ensemble import GradientBoostingRegressor
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_curve, auc
-from scipy import interpolate
-from sklearn.model_selection import KFold, train_test_split
+from sklearn.model_selection import KFold
+from sklearn.utils import shuffle
+import model_parameter
 
 if __name__ == '__main__':
     # 获取数据集及标签,打乱数据(标签有序或过于集中会导致交叉验证时,只有一种样本,导致roc的area为nan)
-    dataframe = shuffle(pd.read_csv('data/new_result.csv', encoding='utf-8', low_memory=False))
-    # dataframe = pd.read_csv('result/fill_with_average.csv', encoding='utf-8')
-    ards = np.array(dataframe.iloc[:, 1:-3])
-    label = np.array(dataframe.iloc[:, -3])
+    # dataframe = shuffle(pd.read_csv('data/new_result.csv', encoding='utf-8', low_memory=False))
+    dataframe = shuffle(pd.read_csv('result/fill_with_average.csv', encoding='utf-8'))
+    ards = np.array(dataframe.iloc[:, 1:-1])
+    # print(str(ards))
+    label = np.array(dataframe.iloc[:, -1])
     # print(str(ards) + ' label is : ' + str(label))
     label_new = []
     # 数据类型转换
@@ -30,13 +30,14 @@ if __name__ == '__main__':
     aucs = []
     mean_fpr = np.linspace(0, 1, 100)
     i = 0
+    model = GradientBoostingRegressor(random_state=123)
     # 五折交叉检验
     for train_index, test_index in KF.split(ards):
         x_train, x_test = ards[train_index], ards[test_index]
         y_train, y_test = label_new[train_index], label_new[test_index]
-        gbdt_regressor_model = filter.param.reg_model
-        gbdt_regressor_model.fit(x_train, y_train)
-        y_pred = gbdt_regressor_model.predict(x_test)
+        # model = model_parameter.fold5_GBDT
+        model.fit(x_train, y_train)
+        y_pred = model.predict(x_test)
         # gbdt_classify_model = filter.param.classify_model
         # gbdt_classify_model.fit(x_train, y_train)
         # y_pred = gbdt_classify_model.predict(x_test)
