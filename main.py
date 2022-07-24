@@ -29,6 +29,7 @@ from filter.param import result_header
 def concat(data, label):
     origin_ids = data['id']
     modify_ids = label['id']
+    print('id is : ' + str(label['id']))
     statuses = label['status']
     details = label['detail']
     new_status = []
@@ -43,8 +44,7 @@ def concat(data, label):
     data['detail'] = new_detail
     dataframe = DataFrame(data)
     dataframe.to_csv('data/new_result.csv', mode='w', encoding='utf-8', index=False)
-    print('done! :')
-
+    print('done!')
 
 
 class MyThread(threading.Thread):
@@ -66,24 +66,24 @@ class MyThread(threading.Thread):
             header['id'] = id
             header['severity'] = severity
             # 查询相关住院记录动态数据
-            # query = query_sql.Query()
-            # dynamic = query.filter_dynamic(id, identification, enrollment)
-            # query = query_sql.Query()
-            # # 查询相关住院记录静态数据
-            # query.filter_static(item, header)
             query = query_sql.Query()
-            status, detail = query.access_outcome(id, enrollment)
+            dynamic = query.filter_dynamic(id, identification, enrollment)
+            query = query_sql.Query()
+            # # 查询相关住院记录静态数据
+            query.filter_static(item, header)
+            query = query_sql.Query()
+            status, detail, unitstay, hospitalstay = query.access_outcome(id, enrollment)
             # print('id : ' + str(header['id']) + ' status : ' + str(status) + ' detail : ' + str(detail))
             header['status'] = status
             header['detail'] = detail
-            dataframe = DataFrame([header])
-            dataframe.to_csv('result/outcome.csv', mode='a', encoding='utf-8', header=False, index=False)
+            header['unit'] = unitstay
+            header['hospital'] = hospitalstay
             # 计算动态数据的中位数、方差以及变化率
-            # result_dict = query_sql.compute_dynamic(dynamic, header)
-            # data = DataFrame([result_dict])
+            result_dict = query_sql.compute_dynamic(dynamic, header)
+            data = DataFrame([result_dict])
             # 数据追加写入文件
-            # data.to_csv('result/feature_data.csv', mode='a', encoding='utf-8', header=False, index=False)
-            # print(str(item) + '写入成功！')
+            data.to_csv('result/feature_data.csv', mode='a', encoding='utf-8', header=False, index=False)
+            print(str(item) + '写入成功！')
 
 
 # Press the green button in the gutter to run the script.
@@ -157,15 +157,12 @@ if __name__ == '__main__':
     #     name = str(data[0][0]) + '-' + str(data[-1][0])
     #     # 分线程运行
     #     MyThread(name=name, data=data).start()
-
-    # MyThread(name='test', data=[[511762, 0, 2, 1440]]).start()
+    # 表头写入
     # Header = filter.param.result_header
     # with open('result/feature_data.csv', mode='a', newline='') as csvfile:
     #     writer = csv.DictWriter(csvfile, fieldnames=Header)
     #     writer.writeheader()
-    data = pd.read_csv('result/fill_with_average.csv', low_memory=False)
-    label = pd.read_csv('result/outcome.csv', low_memory=False)
-    concat(data, label)
-    # 注释前面所有行，打开这两行哟，谢谢
-    # result = pd.read_csv('result/feature_data.csv', low_memory=False)
+    # 动态缺省值填充，静态缺失值填充
+    result = pd.read_csv('result/feature_data.csv', low_memory=False)
     # fill_invalid_data = query_sql.fill_invalid_data_with_average(result)
+    fill_with_0 = query_sql.fill__with_0(result)

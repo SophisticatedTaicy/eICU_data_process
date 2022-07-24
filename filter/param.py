@@ -17,7 +17,7 @@ SEARCH_PATH = 'eicu_crd'
 动态特征顺序为：
 动脉血气分析、血常规（血液分析）、肝功能、肾功能、凝血功能、心肌酶及心肌治疗标志物、呼吸机参数
 '''
-result_header = ['id', 'severity',
+result_header = ['id',
                  'warfarin', 'dobutamine', 'Dopamine', 'epinephrine', 'Heparin', 'Milrinone', 'Norepinephrine',
                  'phenylephrine', 'vasopressin', 'Vasopressor', 'Acute_Coronary_Syndrome_diagnosis',
                  'Acute_Myocardial_Infarction', 'Acute_Renal_Failure', 'Arrhythmia',
@@ -67,7 +67,8 @@ result_header = ['id', 'severity',
                  'Non-Invasive BP Diastolic_median', 'Non-Invasive BP Diastolic_variances',
                  'Non-Invasive BP Diastolic_changerate', 'Non-Invasive BP Mean_median',
                  'Non-Invasive BP Mean_variances', 'Non-Invasive BP Mean_changerate', 'Non-Invasive BP Systolic_median',
-                 'Non-Invasive BP Systolic_variances', 'Non-Invasive BP Systolic_changerate', 'status', 'detail']
+                 'Non-Invasive BP Systolic_variances', 'Non-Invasive BP Systolic_changerate', 'status', 'detail',
+                 'severity', 'unit', 'hospital']
 
 dynamic_list = ['albumin', 'ALT (SGPT)', 'AST (SGOT)', '-bands', 'Base Excess', '-basos', 'bicarbonate',
                 'total bilirubin', 'BUN', 'calcium', 'Total CO2', 'creatinine', '-eos', 'FiO2', 'glucose',
@@ -97,12 +98,10 @@ params = {'n_estimators': 10,  # 弱分类器的个数
           'learning_rate': 0.0000000001}
 
 reg_model = GradientBoostingRegressor(
-    loss="ls",
-    learning_rate=0.18,
-    n_estimators=200,
-    subsample=0.8,
-    max_features=0.8,
-    max_depth=3,
+    loss="squared_error",
+    learning_rate=0.01,
+    n_estimators=100,
+    max_depth=30,
     verbose=2
 )
 
