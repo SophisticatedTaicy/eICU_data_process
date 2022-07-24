@@ -26,7 +26,25 @@ import pf_filter
 from filter.param import result_header
 
 
-# def concat(data, label):
+def concat(data, label):
+    origin_ids = data['id']
+    modify_ids = label['id']
+    statuses = label['status']
+    details = label['detail']
+    new_status = []
+    new_detail = []
+    for origin_id in origin_ids:
+        for modify_id, status, detail in zip(modify_ids, statuses, details):
+            if origin_id == modify_id:
+                new_status.append(status)
+                new_detail.append(detail)
+    data.drop(columns='status', inplace=True)
+    data['status'] = new_status
+    data['detail'] = new_detail
+    dataframe = DataFrame(data)
+    dataframe.to_csv('data/new_result.csv', mode='w', encoding='utf-8', index=False)
+    print('done! :')
+
 
 
 class MyThread(threading.Thread):
@@ -139,31 +157,15 @@ if __name__ == '__main__':
     #     name = str(data[0][0]) + '-' + str(data[-1][0])
     #     # 分线程运行
     #     MyThread(name=name, data=data).start()
-    data = pd.read_csv('result/fill_with_average.csv', low_memory=False)
-    origin_ids = data['id']
-    label = pd.read_csv('result/outcome.csv', low_memory=False)
-    modify_ids = label['id']
-    statuses = label['status']
-    details = label['detail']
-    new_status = []
-    new_detail = []
-    for origin_id in origin_ids:
-        for modify_id, status, detail in zip(modify_ids, statuses, details):
-            if origin_id == modify_id:
-                new_status.append(status)
-                new_detail.append(detail)
-    data.drop(columns='status', inplace=True)
-    data['status'] = new_status
-    data['detail'] = new_detail
-    dataframe = DataFrame(data)
-    dataframe.to_csv('data/new_result.csv', mode='w', encoding='utf-8', index=False)
-    print('done! :')
+
     # MyThread(name='test', data=[[511762, 0, 2, 1440]]).start()
     # Header = filter.param.result_header
     # with open('result/feature_data.csv', mode='a', newline='') as csvfile:
     #     writer = csv.DictWriter(csvfile, fieldnames=Header)
     #     writer.writeheader()
-
+    data = pd.read_csv('result/fill_with_average.csv', low_memory=False)
+    label = pd.read_csv('result/outcome.csv', low_memory=False)
+    concat(data, label)
     # 注释前面所有行，打开这两行哟，谢谢
     # result = pd.read_csv('result/feature_data.csv', low_memory=False)
     # fill_invalid_data = query_sql.fill_invalid_data_with_average(result)
