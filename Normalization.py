@@ -10,7 +10,7 @@ from sklearn.metrics import r2_score, roc_curve, auc
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 
-import model_parameter
+import classify_parameter
 
 
 def normalization(data):
